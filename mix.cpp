@@ -1,5 +1,6 @@
 #include <vector>
 #include <string>
+#include "io.h"
 
 enum class Sign { POS, NEG };
 enum class Overflow { ON, OFF };
@@ -96,20 +97,35 @@ struct MixCore {
 
 class Mix {
 public:
-  Mix(MixCore core, int pc = 0) : core(core), pc(pc) {};
-  Mix(std::string core_file, int pc = 0);
+  // In-memory core (owned by caller)
+  Mix(MixCore *core, int pc = 0) : core(core), pc(pc) {};
+  // Mapped core (owned by class)
+  Mix(std::string core_file, int pc = 0) {
+    void *raw_core = nullptr;
+    if (open_and_map(
+          core_file,
+          sizeof(MixCore),
+          raw_core,
+          this->core_fd
+        ) == -1)
+      throw errno;
+    this->core = static_cast<MixCore *>(raw_core);
+  }
+  ~Mix() {
+    if (core_fd != -1) {
+      unmap_and_close(core, sizeof(MixCore), core_fd);
+    }
+  }
+
   void step();
   void run();
 private:
-  MixCore core;
+  MixCore *core;
   int pc;
   bool panic = false;
   std::string panic_msg = "";
+  int core_fd = -1;
 };
-
-Mix::Mix(std::string core_file, int pc) {
-  // TODO
-}
 
 void Mix::step() {
   // TODO
@@ -120,5 +136,7 @@ void Mix::run() {
 }
 
 int main() {
+  Mix mix("./core");
+  mix.step();
   return 0;
 }
