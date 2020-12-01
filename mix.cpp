@@ -36,13 +36,14 @@ class Word {
 public:
   Word(int w = 0) : w(w) {}
   Word(Sign s, std::vector<Byte> b) {
-    w = 0;
+    int aw = 0;
     for (Byte x: b) {
-      w = (w << 6) | x;
+      aw = (aw << 6) | x;
     }
     if (s == Sign::NEG) {
-      w = -w;
+      aw = -aw;
     }
+    w = aw;
   }
   operator int() const {
     return w;
@@ -72,6 +73,52 @@ Word Word::field(int l, int r) {
     b[i-1] = this->b(i);
   }
   return Word(s, b);
+}
+
+// I/O helpers
+// in "pretty print format"
+std::istream& operator>>(std::istream& in, Word &w) {
+  std::string raw_sgn;
+  std::vector<Byte> b(5);
+  in >> raw_sgn;
+  if (in.fail()) {
+    return in;
+  }
+  Sign s;
+  if (raw_sgn == "+") {
+    s = Sign::POS;
+  } else if (raw_sgn == "-") {
+    s = Sign::NEG;
+  } else {
+    in.setstate(std::ios_base::failbit);
+    return in;
+  }
+  for (int i = 0; i < 5; i++) {
+    unsigned next_byte;
+    in >> next_byte;
+    if (in.fail()) {
+      return in;
+    }
+    b[i] = (Byte) next_byte;
+  }
+  w = {s, b};
+  return in;
+}
+
+std::ostream& operator<<(std::ostream& out, Word w) {
+  if (w.sgn() == Sign::POS) {
+    out << "+ ";
+  } else {
+    out << "- ";
+  }
+  for (int i = 0; i < 5; i++) {
+    out.width(2);
+    out.fill('0');
+    out << (unsigned) w.b(i);
+    if (i < 4)
+      out << " ";
+  }
+  return out;
 }
 
 /*
@@ -128,6 +175,7 @@ public:
       bool include_zeros = true);
   void step();
   void run();
+  void test();
 private:
   MixCore *core;
   int pc;
@@ -141,7 +189,7 @@ private:
  * Mix machine. Skip all invalid lines.
  */
 void Mix::load(std::string filename) {
-  std::ifstream fs{filename, std::ios_base::in};
+  std::ifstream fs {filename};
   for (std::string s; fs >> s; ) {
     // Registers
     if (s[0] == 'A') {
@@ -153,8 +201,7 @@ void Mix::load(std::string filename) {
       if (i >= 1 && i <= 6) {
         fs >> core->i[i];
       } else {
-        // drop rest of line
-        (void) getline(fs, s);
+        fs.setstate(std::ios_base::failbit);
       }
     } else if (s[0] == 'J') {
       fs >> core->j;
@@ -164,9 +211,14 @@ void Mix::load(std::string filename) {
       if (i >= 0 && i < MEM_SIZE) {
         fs >> core->memory[i];
       } else {
-        // drop rest of line
-        getline(fs, s);
+        fs.setstate(std::ios_base::failbit);
       }
+    }
+    if (fs.fail()) {
+      fs.clear();
+      // discard remainder of line and continue
+      fs.unget();
+      getline(fs, s);
     }
   }
   fs.close();
@@ -182,18 +234,20 @@ void Mix::dump(
     std::string filename,
     bool include_registers,
     bool include_zeros) {
-  std::ostream fs{filename, std::ios_base::out};
+  std::ofstream fs {filename};
   // Registers
   if (include_registers) {
-    fs << "A: " << core->a << std::endl;
-    fs << "X: " << core->x << std::endl;
+    fs << "   A: " << core->a << std::endl;
+    fs << "   X: " << core->x << std::endl;
     for (int i = 0; i < 6; i++) {
       fs << "I[" << (i+1) << "]: " << core->i[i] << std::endl;
     }
-    fs << "J: " << core->j << std::endl;
+    fs << "   J: " << core->j << std::endl;
   }
   for (int i = 0; i < MEM_SIZE; i++) {
     if (core->memory[i] != 0 || include_zeros) {
+      fs.width(4);
+      fs.fill('0');
       fs << i << ": " << core->memory[i] << std::endl;
     }
   }
@@ -208,13 +262,19 @@ void Mix::run() {
   // TODO
 }
 
+void Mix::test() {
+  core->a = 4;
+  core->x = 5;
+  core->overflow = Overflow::ON;
+  core->memory[0] = 0xdeadbeef;
+  core->memory[3999] = 0xdeadbeef;
+}
+
 int main() {
   Mix mix("./core");
-  mix.core->a = 4;
-  mix.core->x = 5;
-  mix.core->overflow = Overflow::ON;
-  mix.core->memory[0] = 0xdeadbeef;
-  mix.core->memory[3999] = 0xdeadbeef;
+  mix.test();
   mix.step();
+  mix.dump("./dump-test");
+  mix.dump("./dump-test-2", true, false);
   return 0;
 }
