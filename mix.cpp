@@ -102,13 +102,12 @@ public:
   // Mapped core (owned by class)
   Mix(std::string core_file, int pc = 0) {
     void *raw_core = nullptr;
-    if (open_and_map(
-          core_file,
-          sizeof(MixCore),
-          raw_core,
-          this->core_fd
-        ) == -1)
-      throw errno;
+    open_and_map(
+      core_file,
+      sizeof(MixCore),
+      raw_core,
+      this->core_fd
+    );
     this->core = static_cast<MixCore *>(raw_core);
   }
   ~Mix() {
@@ -137,6 +136,7 @@ void Mix::run() {
 
 int main() {
   Mix mix("./core");
+  Mix mix2("/etc/core");
   mix.step();
   return 0;
 }

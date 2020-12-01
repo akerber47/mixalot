@@ -9,9 +9,15 @@
  *
  * Used for the memory mapped MIX core.
  */
-int open_and_map(std::string filename, size_t sz, void *& map, int& fd);
+void open_and_map(std::string filename, size_t sz, void *& map, int& fd);
 
 /*
  * Inverse of the above operation, for cleanup.
  */
-int unmap_and_close(void *map, size_t sz, int fd);
+void unmap_and_close(void *map, size_t sz, int fd);
+
+class Sys_error {
+public:
+  Sys_error(int err) : err(err) {}
+  int err;
+};
