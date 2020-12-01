@@ -3,7 +3,7 @@
 #include "io.h"
 
 enum class Sign { POS, NEG };
-enum class Overflow { ON, OFF };
+enum class Overflow { OFF, ON };
 enum class Comp { LESS, EQUAL, GREATER };
 
 /*
@@ -81,6 +81,7 @@ Word Word::field(int l, int r) {
 using Addr = Word;
 
 constexpr int MEM_SIZE = 4000;
+constexpr int CORE_SIZE = MEM_SIZE + 16;
 
 struct MixCore {
   // Registers
@@ -91,6 +92,10 @@ struct MixCore {
   // Flags
   Overflow overflow;
   Comp comp;
+  // Padding so memory is more aligned
+  // and core dumps are easy to read!
+  Word pad[5];
+  // Memory starts at 16 words (0x40 bytes in xxd)
   // Memory
   Word memory[MEM_SIZE];
 };
@@ -118,8 +123,8 @@ public:
 
   void step();
   void run();
-private:
   MixCore *core;
+private:
   int pc;
   bool panic = false;
   std::string panic_msg = "";
@@ -136,7 +141,11 @@ void Mix::run() {
 
 int main() {
   Mix mix("./core");
-  Mix mix2("/etc/core");
+  mix.core->a = 4;
+  mix.core->x = 5;
+  mix.core->overflow = Overflow::ON;
+  mix.core->memory[0] = 0xdeadbeef;
+  mix.core->memory[3999] = 0xdeadbeef;
   mix.step();
   return 0;
 }
