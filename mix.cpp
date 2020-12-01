@@ -1,5 +1,6 @@
 #include <vector>
 #include <string>
+#include <fstream>
 #include "io.h"
 
 enum class Sign { POS, NEG };
@@ -120,16 +121,84 @@ public:
       unmap_and_close(core, sizeof(MixCore), core_fd);
     }
   }
-
+  void load(std::string filename);
+  void dump(
+      std::string filename,
+      bool include_registers = true,
+      bool include_zeros = true);
   void step();
   void run();
-  MixCore *core;
 private:
+  MixCore *core;
   int pc;
   bool panic = false;
   std::string panic_msg = "";
   int core_fd = -1;
 };
+
+/*
+ * Load a core dump or program listing into the current
+ * Mix machine. Skip all invalid lines.
+ */
+void Mix::load(std::string filename) {
+  std::ifstream fs{filename, std::ios_base::in};
+  for (std::string s; fs >> s; ) {
+    // Registers
+    if (s[0] == 'A') {
+      fs >> core->a;
+    } else if (s[0] == 'X') {
+      fs >> core->x;
+    } else if (s[0] == 'I') {
+      int i = stoi(s.substr(2, 1));
+      if (i >= 1 && i <= 6) {
+        fs >> core->i[i];
+      } else {
+        // drop rest of line
+        (void) getline(fs, s);
+      }
+    } else if (s[0] == 'J') {
+      fs >> core->j;
+    // Memory
+    } else {
+      int i = stoi(s);
+      if (i >= 0 && i < MEM_SIZE) {
+        fs >> core->memory[i];
+      } else {
+        // drop rest of line
+        getline(fs, s);
+      }
+    }
+  }
+  fs.close();
+}
+
+/*
+ * Dump a full core image of the Mix machine.
+ * If include_zeros is set, omit lines for memory
+ * rows that are zero.
+ * If include_registers is set, include registers in the dump.
+ */
+void Mix::dump(
+    std::string filename,
+    bool include_registers,
+    bool include_zeros) {
+  std::ostream fs{filename, std::ios_base::out};
+  // Registers
+  if (include_registers) {
+    fs << "A: " << core->a << std::endl;
+    fs << "X: " << core->x << std::endl;
+    for (int i = 0; i < 6; i++) {
+      fs << "I[" << (i+1) << "]: " << core->i[i] << std::endl;
+    }
+    fs << "J: " << core->j << std::endl;
+  }
+  for (int i = 0; i < MEM_SIZE; i++) {
+    if (core->memory[i] != 0 || include_zeros) {
+      fs << i << ": " << core->memory[i] << std::endl;
+    }
+  }
+  fs.close();
+}
 
 void Mix::step() {
   // TODO
