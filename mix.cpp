@@ -1,7 +1,9 @@
 #include <vector>
 #include <string>
 #include <fstream>
+#include <sstream>
 #include "io.h"
+#include "dbg.h"
 
 enum class Sign { POS, NEG };
 enum class Overflow { OFF, ON };
@@ -55,24 +57,40 @@ public:
     int aw = (w >= 0) ? w : -w;
     return (Byte) ((aw >> (6 * (5 - i))) & BYTE_MAX);
   }
-  Word field(int a, int b);
+  Word field(
+      int l,
+      int r,
+      bool shift_left = false,
+      bool shift_right = false);
 private:
   int w;
 };
 
 /*
  * Fetch the field of the word associated with the field
- * specifier (l:r)
+ * specifier (l:r).
+ * If shift_left is set, return the bytes shifted as far
+ * to the left as possible. For instance, if (l:r) = (4:5)
+ * return
+ * + b4 b5 0 0 0
+ * (instead of the default behavior, + 0 0 0 b4 b5)
+ * Similarly for shifT_right
  */
-Word Word::field(int l, int r) {
+Word Word::field(int l, int r, bool shift_left, bool shift_right) {
   Sign s = Sign::POS;
   if (l == 0) {
     s = this->sgn();
     l = 1;
   }
   std::vector<Byte> b(5);
-  for (int i = l; i < r; i++) {
-    b[i-1] = this->b(i);
+  for (int i = l; i <= r; i++) {
+    if (shift_left) {
+      b[i-l] = this->b(i);
+    } else if (shift_right) {
+      b[5-r+i-1] = this->b(i);
+    } else {
+      b[i-1] = this->b(i);
+    }
   }
   return Word(s, b);
 }
@@ -171,12 +189,14 @@ public:
     }
   }
   void load(std::string filename);
-  void dump(
-      std::string filename,
+  void dump(std::string filename);
+  std::string to_str(
       bool include_registers = true,
-      bool include_zeros = true);
+      bool include_memory = false,
+      bool include_zeros = false);
   void step();
   void run();
+  // Manually set some test values to check orchestration code
   void test();
 private:
   MixCore *core;
@@ -191,6 +211,7 @@ private:
  * Mix machine. Skip all invalid lines.
  */
 void Mix::load(std::string filename) {
+  DBG("loading " + filename);
   std::ifstream fs {filename};
   for (std::string s; fs >> s; ) {
     // Registers
@@ -227,37 +248,61 @@ void Mix::load(std::string filename) {
 }
 
 /*
- * Dump a full core image of the Mix machine.
- * If include_zeros is set, omit lines for memory
+ * Convert core fields of the Mix machine to a string
+ * If include_registers is set, include registers in the string.
+ * If include_memory is set, include memory in the string.
+ * If include_zeros is set, keep lines for memory
  * rows that are zero.
- * If include_registers is set, include registers in the dump.
  */
-void Mix::dump(
-    std::string filename,
+std::string Mix::to_str(
     bool include_registers,
+    bool include_memory,
     bool include_zeros) {
-  std::ofstream fs {filename};
+  std::stringstream ss;
   // Registers
   if (include_registers) {
-    fs << "   A: " << core->a << std::endl;
-    fs << "   X: " << core->x << std::endl;
+    ss << "   A: " << core->a << std::endl;
+    ss << "   X: " << core->x << std::endl;
     for (int i = 0; i < 6; i++) {
-      fs << "I[" << (i+1) << "]: " << core->i[i] << std::endl;
+      ss << "I[" << (i+1) << "]: " << core->i[i] << std::endl;
     }
-    fs << "   J: " << core->j << std::endl;
+    ss << "   J: " << core->j << std::endl;
   }
-  for (int i = 0; i < MEM_SIZE; i++) {
-    if (core->memory[i] != 0 || include_zeros) {
-      fs.width(4);
-      fs.fill('0');
-      fs << i << ": " << core->memory[i] << std::endl;
+  if (include_memory) {
+    for (int i = 0; i < MEM_SIZE; i++) {
+      if (core->memory[i] != 0 || include_zeros) {
+        ss.width(4);
+        ss.fill('0');
+        ss << i << ": " << core->memory[i] << std::endl;
+      }
     }
   }
+  return ss.str();
+}
+
+/*
+ * Dump core fields of the Mix machine to a file.
+ * See above.
+ */
+void Mix::dump(std::string filename) {
+  DBG("dumping to " + filename);
+  std::ofstream fs {filename};
+  fs << to_str(true, true, true);
   fs.close();
 }
 
+/*
+ * Given a word, execute that word as though it's the current
+ * instruction. Return the new value of the program counter.
+ * ie, the address of the next instruction to execute.
+ * Note that the word can be something other than the current
+ * instruction (for debugging purposes).
+ */
+int Mix::execute(Word w) {
+  
+
 void Mix::step() {
-  // TODO
+  pc = execute(core->memory[pc]);
 }
 
 void Mix::run() {
@@ -274,14 +319,35 @@ void Mix::test() {
   core->overflow = Overflow::ON;
   core->memory[0] = 0xdeadbeef;
   core->memory[3999] = 0xdeadbeef;
+
+}
+
+void test_core() {
+  DBG("test_core");
+  Mix mix("./test.core");
+  mix.test();
+  // manually verify core file to check that it's good
+  // $ xxd test.core | less
+}
+
+void test_dump() {
+  DBG("test_dump");
+  MixCore core;
+  Mix m(&core);
+  // set some values
+  m.test();
+  m.dump("./test_dump.txt");
+  // load into new machine
+  Mix m2("./test_dump.core");
+  m2.load("./test_dump.txt");
+  // manually verify core file to check that it's good
+  // $ xxd test_dump.core | less
 }
 
 int main() {
-  Mix mix("./core");
-  mix.test();
-  mix.step();
-  mix.dump("./dump-test");
-  mix.dump("./dump-test-2", true, false);
-  mix.dump("./dump-test-3", false, false);
+  DBG_INIT();
+  test_core();
+  test_dump();
+  DBG_CLOSE();
   return 0;
 }
