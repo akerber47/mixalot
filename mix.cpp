@@ -48,7 +48,9 @@ public:
   operator int() const {
     return w;
   }
+  // Sign = byte 0
   Sign sgn() { return (w >= 0) ? Sign::POS : Sign::NEG; }
+  // Bytes numbered from 1 to 5
   Byte b(int i) {
     int aw = (w >= 0) ? w : -w;
     return (Byte) ((aw >> (6 * (5 - i))) & BYTE_MAX);
@@ -111,11 +113,11 @@ std::ostream& operator<<(std::ostream& out, Word w) {
   } else {
     out << "- ";
   }
-  for (int i = 0; i < 5; i++) {
+  for (int i = 1; i < 6; i++) {
     out.width(2);
     out.fill('0');
     out << (unsigned) w.b(i);
-    if (i < 4)
+    if (i < 5)
       out << " ";
   }
   return out;
@@ -265,6 +267,10 @@ void Mix::run() {
 void Mix::test() {
   core->a = 4;
   core->x = 5;
+  core->i[0] = 3;
+  core->i[1] = 9;
+  core->i[2] = 27;
+  core->i[3] = 81;
   core->overflow = Overflow::ON;
   core->memory[0] = 0xdeadbeef;
   core->memory[3999] = 0xdeadbeef;
@@ -276,5 +282,6 @@ int main() {
   mix.step();
   mix.dump("./dump-test");
   mix.dump("./dump-test-2", true, false);
+  mix.dump("./dump-test-3", false, false);
   return 0;
 }
