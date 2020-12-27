@@ -37,16 +37,10 @@ constexpr long long DWORD_MAX = 077777777777777777777;
 class Word {
 public:
   Word(int w = 0) : w(w) {}
-  Word(Sign s, std::vector<Byte> b) {
-    int aw = 0;
-    for (Byte x: b) {
-      aw = (aw << 6) | x;
-    }
-    if (s == Sign::NEG) {
-      aw = -aw;
-    }
-    w = aw;
-  }
+  Word(Sign s, std::vector<Byte> b);
+  Word(Word dest, Word src, int l, int r,
+      bool shift_left = false,
+      bool shift_right = false);
   operator int() const {
     return w;
   }
@@ -67,6 +61,56 @@ private:
 };
 
 /*
+ * Build a new word from 5 bytes and a sign.
+ */
+Word::Word(Sign s, std::vector<Byte> b) {
+  int aw = 0;
+  for (Byte x: b) {
+    aw = (aw << 6) | x;
+  }
+  if (s == Sign::NEG) {
+    aw = -aw;
+  }
+  w = aw;
+}
+
+/*
+ * Build a new word by "copying the specified fields from
+ * src to dest".
+ * In other words, start with a copy of the word dest, and
+ * then copy over fields from the word src corresponding the
+ * specifier (l:r).
+ * If shift_left is set, copy over the bytes shifted as far
+ * to the left as possible. For instance, if (l:r) = (4:5)
+ * copy over
+ * b4 b5 * * *
+ * (instead of the default behavior, * * * b4 b5)
+ * Similarly for shift_right. Note that signs don't shift.
+ */
+Word::Word(Word dest, Word src, int l, int r,
+    bool shift_left, bool shift_right) {
+  if (l < 0 || r < 0 || l > 5 || r > 5) {
+    D3("BAD FIELD! ", l, r);
+  }
+  Sign s = dest.sgn();
+  if (l == 0) {
+    s = src.sgn();
+    l = 1;
+  }
+  std::vector<Byte> b =
+    {dest.b(1), dest.b(2), dest.b(3), dest.b(4), dest.b(5)};
+  for (int i = l; i <= r; i++) {
+    if (shift_left) {
+      b[i-l] = src.b(i);
+    } else if (shift_right) {
+      b[5-r+i-1] = src.b(i);
+    } else {
+      b[i-1] = src.b(i);
+    }
+  }
+  Word(s,b);
+}
+/*
  * Fetch the field of the word associated with the field
  * specifier (l:r).
  * If shift_left is set, return the bytes shifted as far
@@ -77,25 +121,7 @@ private:
  * Similarly for shifT_right
  */
 Word Word::field(int l, int r, bool shift_left, bool shift_right) {
-  if (l < 0 || r < 0 || l > 5 || r > 5) {
-    D3("BAD FIELD! ", l, r);
-  }
-  Sign s = Sign::POS;
-  if (l == 0) {
-    s = this->sgn();
-    l = 1;
-  }
-  std::vector<Byte> b(5);
-  for (int i = l; i <= r; i++) {
-    if (shift_left) {
-      b[i-l] = this->b(i);
-    } else if (shift_right) {
-      b[5-r+i-1] = this->b(i);
-    } else {
-      b[i-1] = this->b(i);
-    }
-  }
-  return Word(s, b);
+  return {0, *this, l, r, shift_left, shift_right};
 }
 
 // I/O helpers
@@ -263,7 +289,6 @@ std::string Mix::to_str(
     bool include_memory,
     bool include_zeros) {
   std::stringstream ss;
-  // Registers
   if (include_registers) {
     ss << "   A: " << core->a << std::endl;
     ss << "   X: " << core->x << std::endl;
@@ -388,7 +413,21 @@ int Mix::execute(Word w) {
 
   // If we've made it this far, the instruction is valid.
   // Execute it.
-  return pc+1;
+  int next_pc = pc + 1;
+  if (c == 1) {
+    // arithmetic
+  }
+    // ... special
+    // shift
+    // MOVE
+  else if (memop(c)) {
+
+    // TODO
+  } else {
+    // TODO
+  }
+
+  return next_pc;
 }
 
 void Mix::step() {
