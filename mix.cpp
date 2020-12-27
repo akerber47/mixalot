@@ -295,6 +295,35 @@ void Mix::dump(std::string filename) {
   fs.close();
 }
 
+// operator classification helpers
+// Arithmetic: ADD, SUB, MUL, DIV
+bool arithop(int c) {
+  return (c >= 1 && c <= 4);
+}
+// Memory: LD*, ST*
+bool memop(int c) {
+  return (c >= 7 && c <= 33);
+}
+// Jump: J*
+// note JRED and JBUS are also I/O ops
+bool jmpop(int c) {
+  return (c == 34) ||
+    (c >= 38 && c <= 47);
+}
+// I/O: IN, OUT, IOC, JRED, JBUS
+// note JRED and JBUS are also jump ops
+bool ioop(int c) {
+  return (c >= 34 && c <= 38);
+}
+// Transfer: EN*, INC*, DEC*
+bool transop(int c) {
+  return (c >= 48 && c <= 55);
+}
+// Comparison: CMP*
+bool cmpop(int c) {
+  return (c >= 56);
+}
+
 /*
  * Given a word, execute that word as though it's the current
  * instruction. Return the new value of the program counter.
@@ -303,6 +332,63 @@ void Mix::dump(std::string filename) {
  * instruction (for debugging purposes).
  */
 int Mix::execute(Word w) {
+  Word aa = w.field(0, 2, false, true);
+  int i = w.b(3);
+  int f = w.b(4);
+  int c = w.b(5);
+  // validate i
+  if (i < 0 || i > 6) {
+    D3("invalid i, (i,w) = ", i, w);
+    return -1;
+  }
+
+  int m = (int) aa;
+  if (i > 0) {
+    m += (int) core->i[i-1];
+  }
+  // validate m
+  if (
+      // All arithmetic, memory, jump, cmp, and MOVE
+      // ops require M to be a valid memory address
+      ((arithop(c) || memop(c) || jmpop(c) ||
+        cmpop(c) || (c == 7)) &&
+       (m < 0 || m >= 4000)) ||
+      // Shift op requires non negative m
+      (c == 6 && m < 0)) {
+    D3("Invalid m, (m,w) = ", m, w);
+    return -1;
+  }
+
+  // validate f
+  // Note that f is an (unsigned) byte from b(),
+  // so it's guaranteed to be from 0 to 63
+  int l = f / 8;
+  int r = f % 8;
+  if (
+      // All arithmetic, memory, and cmp ops require
+      // a valid field specification (L:R)
+      // ie, 0 <= L <= R <= 5
+      ((arithop(c) || memop(c) || cmpop(c)) &&
+       (l > r || r > 5)) ||
+      // Special ops require F = 0 (NUM), 1 (CHAR), or 2 (HLT)
+      (c == 5 && f > 2) ||
+      // Shift ops require F in [0,5]
+      (c == 6 && f > 6) ||
+      // IO ops require F to be an IO unit [0,20]
+      (ioop(c) && f > 20) ||
+      // Global jump ops require F in [0,9]
+      (c == 39 && f > 9) ||
+      // Register-based jump ops require F in [0,5]
+      ((jmpop(c) && c != 34 && c != 38 && c != 39) && f > 6) ||
+      // Transfer ops require F in [0,3]
+      (transop(c) && f > 3)) {
+    D3("invalid field, (f,w) = ", f, w);
+    return -1;
+  }
+
+  // If we've made it this far, the instruction is valid.
+  // Execute it.
+  return pc+1;
 }
 
 void Mix::step() {
