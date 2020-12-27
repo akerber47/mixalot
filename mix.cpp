@@ -77,6 +77,9 @@ private:
  * Similarly for shifT_right
  */
 Word Word::field(int l, int r, bool shift_left, bool shift_right) {
+  if (l < 0 || r < 0 || l > 5 || r > 5) {
+    D3("BAD FIELD! ", l, r);
+  }
   Sign s = Sign::POS;
   if (l == 0) {
     s = this->sgn();
@@ -194,6 +197,7 @@ public:
       bool include_registers = true,
       bool include_memory = false,
       bool include_zeros = false);
+  int execute(Word w);
   void step();
   void run();
   // Manually set some test values to check orchestration code
@@ -211,7 +215,7 @@ private:
  * Mix machine. Skip all invalid lines.
  */
 void Mix::load(std::string filename) {
-  DBG("loading " + filename);
+  D2("loading ", filename);
   std::ifstream fs {filename};
   for (std::string s; fs >> s; ) {
     // Registers
@@ -285,7 +289,7 @@ std::string Mix::to_str(
  * See above.
  */
 void Mix::dump(std::string filename) {
-  DBG("dumping to " + filename);
+  D2("dumping to ", filename);
   std::ofstream fs {filename};
   fs << to_str(true, true, true);
   fs.close();
@@ -299,7 +303,7 @@ void Mix::dump(std::string filename) {
  * instruction (for debugging purposes).
  */
 int Mix::execute(Word w) {
-  
+}
 
 void Mix::step() {
   pc = execute(core->memory[pc]);
@@ -323,7 +327,7 @@ void Mix::test() {
 }
 
 void test_core() {
-  DBG("test_core");
+  D("test_core");
   Mix mix("./test.core");
   mix.test();
   // manually verify core file to check that it's good
@@ -331,7 +335,7 @@ void test_core() {
 }
 
 void test_dump() {
-  DBG("test_dump");
+  D("test_dump");
   MixCore core;
   Mix m(&core);
   // set some values
