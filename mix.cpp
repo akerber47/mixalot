@@ -39,6 +39,7 @@ public:
   Word(int w = 0) : w(w) {}
   Word(Sign s, std::vector<Byte> b);
   Word(Word dest, Word src, int l, int r,
+      bool default_positive = false,
       bool shift_left = false,
       bool shift_right = false);
   operator int() const {
@@ -80,19 +81,24 @@ Word::Word(Sign s, std::vector<Byte> b) {
  * In other words, start with a copy of the word dest, and
  * then copy over fields from the word src corresponding the
  * specifier (l:r).
+ * If default_positive is set, and the field does not include 0,
+ * the sign will be automatically set to +. (Otherwise, it will
+ * stay the same as the sign of dest.)
  * If shift_left is set, copy over the bytes shifted as far
  * to the left as possible. For instance, if (l:r) = (4:5)
  * copy over
  * b4 b5 * * *
  * (instead of the default behavior, * * * b4 b5)
- * Similarly for shift_right. Note that signs don't shift.
+ * Similarly for shift_right.
+ * Note that signs are not affected by shifts.
+ *
  */
 Word::Word(Word dest, Word src, int l, int r,
-    bool shift_left, bool shift_right) {
+    bool default_positive, bool shift_left, bool shift_right) {
   if (l < 0 || r < 0 || l > 5 || r > 5) {
     D3("BAD FIELD! ", l, r);
   }
-  Sign s = dest.sgn();
+  Sign s = default_positive ? Sign::POS : dest.sgn();
   if (l == 0) {
     s = src.sgn();
     l = 1;
@@ -121,7 +127,7 @@ Word::Word(Word dest, Word src, int l, int r,
  * Similarly for shifT_right
  */
 Word Word::field(int l, int r, bool shift_left, bool shift_right) {
-  return {0, *this, l, r, shift_left, shift_right};
+  return {0, *this, l, r, false, shift_left, shift_right};
 }
 
 // I/O helpers
@@ -411,20 +417,45 @@ int Mix::execute(Word w) {
     return -1;
   }
 
+
   // If we've made it this far, the instruction is valid.
   // Execute it.
-  int next_pc = pc + 1;
-  if (c == 1) {
-    // arithmetic
-  }
-    // ... special
-    // shift
-    // MOVE
-  else if (memop(c)) {
+  D6("Executing op #C M(L:R) F = ", c, m, l, r, f);
 
-    // TODO
-  } else {
-    // TODO
+  Word& reg =
+    (c % 8 == 0) ? core->a :
+    (c % 8 == 7) ? core->x :
+    core->i[(c % 8) - 1];
+  Word mem_dummy = 0;
+  Word& mem = (m >= 0 && m < 4000) ? core->memory[m] : mem_dummy;
+
+  int next_pc = pc + 1;
+  if (c == 0) {
+    // NOP
+  } else if (c >= 8 && c < 16) {
+    // Load (LD*)
+    reg = {0, mem, l, r, true, false, true};
+  } else if (c >= 16 && c < 24) {
+    // Load negative (LD*N)
+    reg = {0, -(int)mem, l, r, true, false, true};
+    // TODO: undefined behavior on index registers.
+  } else if (c >= 24 && c < 32) {
+    // Store (ST*)
+    mem = {mem, reg, l, r, false, true, false};
+  } else if (c >= 40 && c < 48) {
+    // Register based jumps (J**)
+    if ((f == 0 && reg < 0) || // J*N
+        (f == 1 && reg == 0) || // J*Z
+        (f == 2 && reg > 0) || // J*P
+        (f == 3 && reg >= 0) || // J*NN
+        (f == 4 && reg != 0) || // J*NZ
+        (f == 5 && reg <= 0)) { // J*NP
+      core->j = next_pc;
+      next_pc = m;
+    }
+  } else if (c >= 48 && c < 56) {
+    // Transfer operators
+    // TODO ...
   }
 
   return next_pc;
