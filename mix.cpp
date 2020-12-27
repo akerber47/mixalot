@@ -28,6 +28,7 @@ constexpr long long DWORD_MAX = 077777777777777777777;
  * Known incompatibility:
  *  - native cannot represent +0 and -0 separately.
  *    programs relying on -0 will behave incorrectly.
+ *  - TODO fix -0
  *
  * Note this is a lightweight conversion class that is "trusting"
  * ie it assumes all input is well structured and nothing will
@@ -36,8 +37,33 @@ constexpr long long DWORD_MAX = 077777777777777777777;
  */
 class Word {
 public:
+  /*
+   * Build a new word from a native integer value.
+   * Native zero becomes +0.
+   */
   Word(int w = 0) : w(w) {}
+  /*
+   * Build a new word from 5 bytes and a sign.
+   */
   Word(Sign s, std::vector<Byte> b);
+  /*
+   * Build a new word by "copying the specified fields from
+   * src to dest".
+   * In other words, start with a copy of the word dest, and
+   * then copy over fields from the word src corresponding the
+   * specifier (l:r).
+   * If default_positive is set, and the field does not include 0,
+   * the sign will be automatically set to +. (Otherwise, it will
+   * stay the same as the sign of dest.)
+   * If shift_left is set, copy over the bytes shifted as far
+   * to the left as possible. For instance, if (l:r) = (4:5)
+   * copy over
+   * b4 b5 * * *
+   * (instead of the default behavior, * * * b4 b5)
+   * Similarly for shift_right.
+   * Note that signs are not affected by shifts.
+   *
+   */
   Word(Word dest, Word src, int l, int r,
       bool default_positive = false,
       bool shift_left = false,
@@ -45,13 +71,26 @@ public:
   operator int() const {
     return w;
   }
-  // Sign = byte 0
+  /*
+   * Quick helpers to return individual fields of the word.
+   * Sign = byte 0
+   * Bytes numbered from 1 to 5
+   */
   Sign sgn() { return (w >= 0) ? Sign::POS : Sign::NEG; }
-  // Bytes numbered from 1 to 5
   Byte b(int i) {
     int aw = (w >= 0) ? w : -w;
     return (Byte) ((aw >> (6 * (5 - i))) & BYTE_MAX);
   }
+  /*
+   * Fetch the field of the word associated with the field
+   * specifier (l:r).
+   * If shift_left is set, return the bytes shifted as far
+   * to the left as possible. For instance, if (l:r) = (4:5)
+   * return
+   * + b4 b5 0 0 0
+   * (instead of the default behavior, + 0 0 0 b4 b5)
+   * Similarly for shifT_right
+   */
   Word field(
       int l,
       int r,
@@ -61,9 +100,6 @@ private:
   int w;
 };
 
-/*
- * Build a new word from 5 bytes and a sign.
- */
 Word::Word(Sign s, std::vector<Byte> b) {
   int aw = 0;
   for (Byte x: b) {
@@ -75,24 +111,6 @@ Word::Word(Sign s, std::vector<Byte> b) {
   w = aw;
 }
 
-/*
- * Build a new word by "copying the specified fields from
- * src to dest".
- * In other words, start with a copy of the word dest, and
- * then copy over fields from the word src corresponding the
- * specifier (l:r).
- * If default_positive is set, and the field does not include 0,
- * the sign will be automatically set to +. (Otherwise, it will
- * stay the same as the sign of dest.)
- * If shift_left is set, copy over the bytes shifted as far
- * to the left as possible. For instance, if (l:r) = (4:5)
- * copy over
- * b4 b5 * * *
- * (instead of the default behavior, * * * b4 b5)
- * Similarly for shift_right.
- * Note that signs are not affected by shifts.
- *
- */
 Word::Word(Word dest, Word src, int l, int r,
     bool default_positive, bool shift_left, bool shift_right) {
   if (l < 0 || r < 0 || l > 5 || r > 5) {
@@ -116,16 +134,6 @@ Word::Word(Word dest, Word src, int l, int r,
   }
   Word(s,b);
 }
-/*
- * Fetch the field of the word associated with the field
- * specifier (l:r).
- * If shift_left is set, return the bytes shifted as far
- * to the left as possible. For instance, if (l:r) = (4:5)
- * return
- * + b4 b5 0 0 0
- * (instead of the default behavior, + 0 0 0 b4 b5)
- * Similarly for shifT_right
- */
 Word Word::field(int l, int r, bool shift_left, bool shift_right) {
   return {0, *this, l, r, false, shift_left, shift_right};
 }
@@ -176,12 +184,6 @@ std::ostream& operator<<(std::ostream& out, Word w) {
   return out;
 }
 
-/*
- * Represent MIX address as a full word for simplicity.
- * (so we can reuse the above helpers).
- * Only use bytes 1 and 2, and the sign.
- */
-using Addr = Word;
 
 constexpr int MEM_SIZE = 4000;
 constexpr int CORE_SIZE = MEM_SIZE + 16;
@@ -223,12 +225,34 @@ public:
       unmap_and_close(core, sizeof(MixCore), core_fd);
     }
   }
+  /*
+   * Load a core dump or program listing into the current
+   * Mix machine. Skip all invalid lines.
+   */
   void load(std::string filename);
+  /*
+   * Dump core fields of the Mix machine to a file.
+   * See above.
+   */
   void dump(std::string filename);
+  /*
+   * Convert core fields of the Mix machine to a string
+   * If include_registers is set, include registers in the string.
+   * If include_memory is set, include memory in the string.
+   * If include_zeros is set, keep lines for memory
+   * rows that are zero.
+   */
   std::string to_str(
       bool include_registers = true,
       bool include_memory = false,
       bool include_zeros = false);
+  /*
+   * Given a word, execute that word as though it's the current
+   * instruction. Return the new value of the program counter.
+   * ie, the address of the next instruction to execute.
+   * Note that the word can be something other than the current
+   * instruction (for debugging purposes).
+   */
   int execute(Word w);
   void step();
   void run();
@@ -242,10 +266,6 @@ private:
   int core_fd = -1;
 };
 
-/*
- * Load a core dump or program listing into the current
- * Mix machine. Skip all invalid lines.
- */
 void Mix::load(std::string filename) {
   D2("loading ", filename);
   std::ifstream fs {filename};
@@ -283,13 +303,6 @@ void Mix::load(std::string filename) {
   fs.close();
 }
 
-/*
- * Convert core fields of the Mix machine to a string
- * If include_registers is set, include registers in the string.
- * If include_memory is set, include memory in the string.
- * If include_zeros is set, keep lines for memory
- * rows that are zero.
- */
 std::string Mix::to_str(
     bool include_registers,
     bool include_memory,
@@ -315,10 +328,6 @@ std::string Mix::to_str(
   return ss.str();
 }
 
-/*
- * Dump core fields of the Mix machine to a file.
- * See above.
- */
 void Mix::dump(std::string filename) {
   D2("dumping to ", filename);
   std::ofstream fs {filename};
@@ -355,13 +364,6 @@ bool cmpop(int c) {
   return (c >= 56);
 }
 
-/*
- * Given a word, execute that word as though it's the current
- * instruction. Return the new value of the program counter.
- * ie, the address of the next instruction to execute.
- * Note that the word can be something other than the current
- * instruction (for debugging purposes).
- */
 int Mix::execute(Word w) {
   Word aa = w.field(0, 2, false, true);
   int i = w.b(3);
