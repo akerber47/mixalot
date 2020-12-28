@@ -301,6 +301,9 @@ std::ostream& operator<<(std::ostream& out, Word w) {
 constexpr int MEM_SIZE = 4000;
 constexpr int CORE_SIZE = MEM_SIZE + 16;
 
+constexpr int PC_ERR = -1;
+constexpr int PC_HLT = -2;
+
 struct MixCore {
   // Registers
   Word a;
@@ -484,7 +487,7 @@ int Mix::execute(Word w) {
   // validate i
   if (i < 0 || i > 6) {
     D3("invalid i, (i,w) = ", i, w);
-    return -1;
+    return PC_ERR;
   }
 
   Word m = aa;
@@ -499,11 +502,11 @@ int Mix::execute(Word w) {
       // ops require M to be a valid memory address
       ((arithop(c) || memop(c) || jmpop(c) ||
         cmpop(c) || (c == 7)) &&
-       (m < 0 || m >= 4000)) ||
+       (m < 0 || m >= MEM_SIZE)) ||
       // Shift op requires non negative m
       (c == 6 && m < 0)) {
     D3("Invalid m, (m,w) = ", m, w);
-    return -1;
+    return PC_ERR;
   }
 
   // validate f
@@ -530,7 +533,7 @@ int Mix::execute(Word w) {
       // Transfer ops require F in [0,3]
       (transop(c) && f > 3)) {
     D3("invalid field, (f,w) = ", f, w);
-    return -1;
+    return PC_ERR;
   }
 
 
@@ -542,10 +545,10 @@ int Mix::execute(Word w) {
     (c % 8 == 0) ? core->a :
     (c % 8 == 7) ? core->x :
     core->i[(c % 8) - 1];
-  Word mem_dummy = 0;
-  Word& mem = (m >= 0 && m < 4000) ? core->memory[m] : mem_dummy;
+  Word dummy = 0; // for mem to reference if it's unused
+  Word& mem = (m >= 0 && m < MEM_SIZE) ? core->memory[m] : dummy;
 
-  int next_pc = (pc + 1) % 4000;
+  int next_pc = (pc + 1) % MEM_SIZE;
   if (c == 0) {
     // NOP
   } else if (c == 1) {
@@ -583,8 +586,18 @@ int Mix::execute(Word w) {
       core->a = ((neg && !mneg) || (!neg && mneg)) ? -ua : ua;
       core->x = neg ? -ux : ux;
     }
-  } else if (c >= 3 && c < 8) {
-    // MUL, DIV, special, shift, MOVE
+  } else if (c == 5) {
+    switch (f) {
+      case 2:
+        D("Halt!");
+        return PC_HLT;
+      case 0: // NUM
+      case 1: // CHR
+      default:
+        D("Not yet implemented!");
+    }
+  } else if (c >= 6 && c < 8) {
+    // shift, MOVE
     // TODO
     D("Not yet implemented!");
   } else if (c >= 8 && c < 16) {
@@ -668,7 +681,7 @@ int Mix::execute(Word w) {
       D3("Overflowed I register, undefined, (i,reg i)",
           i,
           core->i[i]);
-      return -1;
+      return PC_ERR;
     }
   }
 
