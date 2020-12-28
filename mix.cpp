@@ -554,6 +554,35 @@ int Mix::execute(Word w) {
   } else if (c == 2) {
     // SUB
     core->a = core->a + (-mem);
+  } else if (c == 3) {
+    // MUL
+    long long out = ((long long) core->a) * ((long long) mem);
+    bool neg = (out < 0);
+    unsigned long long ax = neg ? -out : out;
+    int a = (ax >> 30);
+    int x = (ax & WORD_MAX);
+    core->a = neg ? -a : a;
+    core->x = neg ? -x : x;
+  } else if (c == 4) {
+    // DIV
+    if (mem == 0) {
+      D("Divide by zero, setting overflow");
+      core->overflow = Overflow::ON;
+    } else {
+      bool neg = (core->a < 0);
+      unsigned long long ax = neg ? -core->a : core->a;
+      ax = (ax << 30) | ((core->x < 0) ? -core->x : core->x);
+      bool mneg = (mem < 0);
+      unsigned long long v = mneg ? -mem : mem;
+      unsigned long long q = ax / v;
+      unsigned long long r = ax % v;
+      if (q > WORD_MAX || r > WORD_MAX)
+        core->overflow = Overflow::ON;
+      int ua = (int)(q & WORD_MAX);
+      int ux = (int)(r & WORD_MAX);
+      core->a = ((neg && !mneg) || (!neg && mneg)) ? -ua : ua;
+      core->x = neg ? -ux : ux;
+    }
   } else if (c >= 3 && c < 8) {
     // MUL, DIV, special, shift, MOVE
     // TODO
