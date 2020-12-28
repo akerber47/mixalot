@@ -22,13 +22,8 @@ constexpr long long DWORD_MAX = 077777777777777777777;
 /*
  * Represents a MIX word (5 unsigned 6-bit bytes, and a sign.)
  * Representation:
- * - word value stored in native int
- * - MIX bytes and sign are "simulated" ie computed on demand
- *
- * Known incompatibility:
- *  - native cannot represent +0 and -0 separately.
- *    programs relying on -0 will behave incorrectly.
- *  - TODO fix -0
+ * - MIX bytes and sign are stored directly.
+ * - value is converted to a native int on demand.
  *
  * Note this is a lightweight conversion class that is "trusting"
  * ie it assumes all input is well structured and nothing will
@@ -40,12 +35,14 @@ public:
   /*
    * Build a new word from a native integer value.
    * Native zero becomes +0.
+   * If the native integer doesn't fit, truncate higher
+   * bits and set the overload flag.
    */
-  Word(int w = 0) : w(w) {}
+  Word(int w = 0);
   /*
    * Build a new word from 5 bytes and a sign.
    */
-  Word(Sign s, std::vector<Byte> b);
+  Word(Sign sgn, std::vector<Byte> b);
   /*
    * Build a new word by "copying the specified fields from
    * src to dest".
@@ -68,47 +65,80 @@ public:
       bool default_positive = false,
       bool shift_left = false,
       bool shift_right = false);
-  operator int() const {
-    return w;
-  }
   /*
    * Quick helpers to return individual fields of the word.
    * Sign = byte 0
    * Bytes numbered from 1 to 5
+   * Overflow = overflow flag
    */
-  Sign sgn() { return (w >= 0) ? Sign::POS : Sign::NEG; }
-  Byte b(int i) {
-    int aw = (w >= 0) ? w : -w;
-    return (Byte) ((aw >> (6 * (5 - i))) & BYTE_MAX);
-  }
+  Sign sgn() const;
+  Byte b(int i) const;
+  Overflow ov() const;
   /*
    * Fetch the field of the word associated with the field
    * specifier (l:r).
-   * If shift_left is set, return the bytes shifted as far
-   * to the left as possible. For instance, if (l:r) = (4:5)
-   * return
-   * + b4 b5 0 0 0
-   * (instead of the default behavior, + 0 0 0 b4 b5)
-   * Similarly for shifT_right
+   * shift_left and shift_right behave similarly to the above
+   * constructor.
    */
   Word field(
       int l,
       int r,
       bool shift_left = false,
-      bool shift_right = false);
+      bool shift_right = false) const;
+  /*
+   * Overloaded operators:
+   * operator int() converts to a native integer
+   *   (reverse of the one-argument constructor above)
+   *   note that -0 is converted to native 0 (+0)
+   * operator+ performs ordinary integer addition with some
+   * special behavior:
+   *   If the result is 0, the sign is set by the
+   *   sign of the first argument to be either +0 or -0
+   *   If the result doesn't fit, the outcome is truncated
+   *   and the overflow flag is set.
+   * operator- (unary) flips the sign only
+   * operator<<, operator>> perform input/output pretty printing
+   *   when the first argument is ostream/istream
+   */
+  operator int() const;
+  Word operator+(Word w) const;
+  Word operator-() const;
 private:
-  int w;
+  // true if overflow occurred while computing/storing this value.
+  bool _ov : 1;
+  // true if negative
+  bool _s : 1;
+  Byte _b1 : 6;
+  Byte _b2 : 6;
+  Byte _b3 : 6;
+  Byte _b4 : 6;
+  Byte _b5 : 6;
 };
 
-Word::Word(Sign s, std::vector<Byte> b) {
-  int aw = 0;
-  for (Byte x: b) {
-    aw = (aw << 6) | x;
+Word::Word(int w) {
+  _s = (w < 0);
+  int aw = _s ? -w : w;
+  _b1 = (Byte)((aw >> 24) & BYTE_MAX);
+  _b2 = (Byte)((aw >> 18) & BYTE_MAX);
+  _b3 = (Byte)((aw >> 12) & BYTE_MAX);
+  _b4 = (Byte)((aw >> 6) & BYTE_MAX);
+  _b5 = (Byte)(aw & BYTE_MAX);
+
+  _ov = ((aw >> 30) > 0);
+}
+
+Word::Word(Sign sgn, std::vector<Byte> b) {
+  _s = (sgn == Sign::NEG);
+  _b1 = b[0] & BYTE_MAX;
+  _b2 = b[1] & BYTE_MAX;
+  _b3 = b[2] & BYTE_MAX;
+  _b4 = b[3] & BYTE_MAX;
+  _b5 = b[4] & BYTE_MAX;
+  _ov = false;
+  for (int i = 0; i < 5; i++) {
+    if (b[i] > BYTE_MAX)
+      _ov = true;
   }
-  if (s == Sign::NEG) {
-    aw = -aw;
-  }
-  w = aw;
 }
 
 Word::Word(Word dest, Word src, int l, int r,
@@ -133,9 +163,62 @@ Word::Word(Word dest, Word src, int l, int r,
     }
   }
   Word(s,b);
+  _ov = src._ov || dest._ov;
 }
-Word Word::field(int l, int r, bool shift_left, bool shift_right) {
+
+Sign Word::sgn() const {
+  return _s ? Sign::NEG : Sign::POS;
+}
+
+Byte Word::b(int i) const {
+  switch (i) {
+    case 1:
+      return _b1;
+    case 2:
+      return _b2;
+    case 3:
+      return _b3;
+    case 4:
+      return _b4;
+    case 5:
+      return _b5;
+    default:
+      D3("Bad byte! (b,w) = ", i, *this);
+      return -1;
+  }
+}
+
+Overflow Word::ov() const {
+  return _ov ? Overflow::ON : Overflow::OFF;
+}
+
+Word Word::field(int l, int r, bool shift_left, bool shift_right) const {
   return {0, *this, l, r, false, shift_left, shift_right};
+}
+
+Word::operator int() const {
+  int w = _b1;
+  w = (w << 6) | _b2;
+  w = (w << 6) | _b3;
+  w = (w << 6) | _b4;
+  w = (w << 6) | _b5;
+  if (_s)
+    w = -w;
+  return w;
+}
+
+Word Word::operator+(Word w) const {
+  Word sum = (int) *this + (int) w;
+  if (*this == 0) {
+    sum._s = this->_s;
+  }
+  return sum;
+}
+
+Word Word::operator-() const {
+  Word w = *this;
+  w._s = !w._s;
+  return w;
 }
 
 // I/O helpers
@@ -192,8 +275,8 @@ struct MixCore {
   // Registers
   Word a;
   Word x;
-  Addr i[6];
-  Addr j;
+  Word i[6];
+  Word j;
   // Flags
   Overflow overflow;
   Comp comp;
