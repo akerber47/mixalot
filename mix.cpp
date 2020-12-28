@@ -25,20 +25,19 @@ constexpr long long DWORD_MAX = 077777777777777777777;
  * - MIX bytes and sign are stored directly.
  * - value is converted to a native int on demand.
  *
- * Note this is a lightweight conversion class that is "trusting"
- * ie it assumes all input is well structured and nothing will
- * overflow. If any inputs are overflowing, result is going to
- * be a big mess (ie undefined).
+ * Note that a Word is a POD (plain old data) in C++
+ * and fits in 32 bits of memory.
  */
 class Word {
 public:
+  Word() = default;
   /*
    * Build a new word from a native integer value.
    * Native zero becomes +0.
    * If the native integer doesn't fit, truncate higher
    * bits and set the overload flag.
    */
-  Word(int w = 0);
+  Word(int w);
   /*
    * Build a new word from 5 bytes and a sign.
    */
@@ -52,6 +51,18 @@ public:
   Sign sgn() const;
   Byte b(int i) const;
   Overflow ov() const;
+  /*
+   * Return Overflow::ON if the word doesn't fit into
+   * the final 2 bytes (b4 and b5).
+   * That is, if it would overflow an index register.
+   */
+  Overflow iov() const;
+
+  /*
+   * A copy of this word, with overflow set to false.
+   */
+  Word with_nov() const;
+
   /*
    * Fetch the field of the word associated with the field
    * specifier (l:r).
@@ -174,6 +185,16 @@ Overflow Word::ov() const {
   return _ov ? Overflow::ON : Overflow::OFF;
 }
 
+Overflow Word::iov() const {
+  return (_ov || _b1 || _b2 || _b3) ? Overflow::ON : Overflow::OFF;
+}
+
+Word Word::with_nov() const {
+  Word w = *this;
+  w._ov = false;
+  return w;
+}
+
 Word Word::field(int l, int r, bool shift_left, bool shift_right) const {
   Word w0(0);
   return w0.with_field(*this, l, r, false, shift_left, shift_right);
@@ -190,7 +211,7 @@ Word Word::with_field(Word src, int l, int r,
     l = 1;
   }
   std::vector<Byte> b =
-    {dest.b(1), dest.b(2), dest.b(3), dest.b(4), dest.b(5)};
+    {this->b(1), this->b(2), this->b(3), this->b(4), this->b(5)};
   for (int i = l; i <= r; i++) {
     if (shift_left) {
       b[i-l] = src.b(i);
@@ -201,7 +222,7 @@ Word Word::with_field(Word src, int l, int r,
     }
   }
   Word w(s,b);
-  w._ov = src._ov || dest._ov;
+  w._ov = src._ov || this->_ov;
   return w;
 }
 
@@ -346,15 +367,14 @@ public:
    * instruction (for debugging purposes).
    */
   int execute(Word w);
-  void step();
+  void step(int i);
+  void timestep(int t);
   void run();
   // Manually set some test values to check orchestration code
   void test();
 private:
   MixCore *core;
   int pc;
-  bool panic = false;
-  std::string panic_msg = "";
   int core_fd = -1;
 };
 
@@ -526,7 +546,6 @@ int Mix::execute(Word w) {
   Word& mem = (m >= 0 && m < 4000) ? core->memory[m] : mem_dummy;
 
   int next_pc = (pc + 1) % 4000;
-  bool jump = false;
   if (c == 0) {
     // NOP
   } else if (c == 1) {
@@ -561,12 +580,12 @@ int Mix::execute(Word w) {
     // Global jumps
     if (f == 1) {
       // JSJ
-      jump = true;
+      next_pc = m;
     } else if (f == 2 && core->overflow == Overflow::ON) {
       // JOV
       core->overflow = Overflow::OFF;
       core->j = next_pc;
-      jump = true;
+      next_pc = m;
     } else if (
         (f == 0) || // JMP
         (f == 3 && core->overflow == Overflow::OFF) || // JNOV
@@ -577,7 +596,7 @@ int Mix::execute(Word w) {
         (f == 8 && core->comp != Comp::EQUAL) || // JNE
         (f == 9 && core->comp != Comp::GREATER)) { // JLE
       core->j = next_pc;
-      jump = true;
+      next_pc = m;
     }
   } else if (c >= 40 && c < 48) {
     // Register based jumps (J**)
@@ -588,26 +607,64 @@ int Mix::execute(Word w) {
         (f == 4 && reg != 0) || // J*NZ
         (f == 5 && reg <= 0)) { // J*NP
       core->j = next_pc;
-      jump = true;
+      next_pc = m;
     }
   } else if (c >= 48 && c < 56) {
     // Transfer operators
-    if (f == 0) {
-      reg = reg.with_field(m, l, r)
-  } else if (c >= 56) {
+    switch (f) {
+      case 1: // ENT*
+        reg = m; break;
+      case 2: // ENN*
+        reg = -m; break;
+      case 3: // INC*
+        reg = reg + m; break;
+      case 4: // DEC*
+        reg = reg + (-m); break;
+    }
+  } else {
     // Comparison operators
-    //
+    Word rf = reg.field(l, r);
+    Word mf = mem.field(l, r);
+    if (rf < mf)
+      core->comp = Comp::LESS;
+    else if (rf == mf)
+      core->comp = Comp::EQUAL;
+    else
+      core->comp = Comp::GREATER;
   }
-  // TODO check pc for after jump instructions
-  // TODO check overflow
-  // set overflow toggle
-  // undefined behavior on index registers.
+
+  // check/validate I overflow
+  for (int i = 0; i < 6; i++) {
+    if (core->i[i].iov() == Overflow::ON) {
+      D3("Overflowed I register, undefined, (i,reg i)",
+          i,
+          core->i[i]);
+      return -1;
+    }
+  }
+
+  // check A/X overflow
+  if (core->a.ov() == Overflow::ON) {
+    D("Overflowed A register");
+    core->overflow = Overflow::ON;
+    core->a = core->a.with_nov();
+  }
+  if (core->x.ov() == Overflow::ON) {
+    D("Overflowed X register");
+    core->overflow = Overflow::ON;
+    core->x = core->x.with_nov();
+  }
 
   return next_pc;
 }
 
-void Mix::step() {
+void Mix::step(int i) {
   pc = execute(core->memory[pc]);
+  // TODO
+}
+
+void Mix::timestep(int t) {
+  // TODO
 }
 
 void Mix::run() {
