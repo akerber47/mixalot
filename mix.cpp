@@ -44,28 +44,6 @@ public:
    */
   Word(Sign sgn, std::vector<Byte> b);
   /*
-   * Build a new word by "copying the specified fields from
-   * src to dest".
-   * In other words, start with a copy of the word dest, and
-   * then copy over fields from the word src corresponding the
-   * specifier (l:r).
-   * If default_positive is set, and the field does not include 0,
-   * the sign will be automatically set to +. (Otherwise, it will
-   * stay the same as the sign of dest.)
-   * If shift_left is set, copy over the bytes shifted as far
-   * to the left as possible. For instance, if (l:r) = (4:5)
-   * copy over
-   * b4 b5 * * *
-   * (instead of the default behavior, * * * b4 b5)
-   * Similarly for shift_right.
-   * Note that signs are not affected by shifts.
-   *
-   */
-  Word(Word dest, Word src, int l, int r,
-      bool default_positive = false,
-      bool shift_left = false,
-      bool shift_right = false);
-  /*
    * Quick helpers to return individual fields of the word.
    * Sign = byte 0
    * Bytes numbered from 1 to 5
@@ -77,14 +55,42 @@ public:
   /*
    * Fetch the field of the word associated with the field
    * specifier (l:r).
-   * shift_left and shift_right behave similarly to the above
-   * constructor.
+   * shift_left and shift_right behave similarly to with_field
+   * function below.
+   * However, the default behavior of field() is to shift right
+   * since we're building a new word.
+   * If sign is not included in the field, it defaults to +
+   * Note: w.field(...) == w0.with_field(w, ...)
+   * where w0 is the zero word
    */
   Word field(
       int l,
       int r,
       bool shift_left = false,
-      bool shift_right = false) const;
+      bool shift_right = true) const;
+
+  /*
+   * Build a new word by "copying the specified fields from src"
+   * In other words, start with a copy of the word dest, and
+   * then copy over fields from the word src corresponding the
+   * specifier (l:r).
+   * If default_positive is set, and the field does not include 0,
+   * the sign will be automatically set to +. (Otherwise, it will
+   * stay the same as the sign of dest.)
+   * If shift_left is set, copy over the bytes shifted as far
+   * to the left as possible. For instance, if (l:r) = (4:5)
+   * copy over
+   * b4 b5 * * *
+   * (instead of the unshifted behavior, * * * b4 b5)
+   * Similarly for shift_right.
+   * The default behavior is to shift_left.
+   * Note that signs are not affected by shifts.
+   *
+   */
+  Word with_field(Word src, int l, int r,
+      bool default_positive = false,
+      bool shift_left = true,
+      bool shift_right = false);
   /*
    * Overloaded operators:
    * operator int() converts to a native integer
@@ -141,30 +147,6 @@ Word::Word(Sign sgn, std::vector<Byte> b) {
   }
 }
 
-Word::Word(Word dest, Word src, int l, int r,
-    bool default_positive, bool shift_left, bool shift_right) {
-  if (l < 0 || r < 0 || l > 5 || r > 5) {
-    D3("BAD FIELD! ", l, r);
-  }
-  Sign s = default_positive ? Sign::POS : dest.sgn();
-  if (l == 0) {
-    s = src.sgn();
-    l = 1;
-  }
-  std::vector<Byte> b =
-    {dest.b(1), dest.b(2), dest.b(3), dest.b(4), dest.b(5)};
-  for (int i = l; i <= r; i++) {
-    if (shift_left) {
-      b[i-l] = src.b(i);
-    } else if (shift_right) {
-      b[5-r+i-1] = src.b(i);
-    } else {
-      b[i-1] = src.b(i);
-    }
-  }
-  Word(s,b);
-  _ov = src._ov || dest._ov;
-}
 
 Sign Word::sgn() const {
   return _s ? Sign::NEG : Sign::POS;
@@ -193,7 +175,34 @@ Overflow Word::ov() const {
 }
 
 Word Word::field(int l, int r, bool shift_left, bool shift_right) const {
-  return {0, *this, l, r, false, shift_left, shift_right};
+  Word w0(0);
+  return w0.with_field(*this, l, r, false, shift_left, shift_right);
+}
+
+Word Word::with_field(Word src, int l, int r,
+    bool default_positive, bool shift_left, bool shift_right) {
+  if (l < 0 || r < 0 || l > 5 || r > 5) {
+    D3("BAD FIELD! ", l, r);
+  }
+  Sign s = default_positive ? Sign::POS : this->sgn();
+  if (l == 0) {
+    s = src.sgn();
+    l = 1;
+  }
+  std::vector<Byte> b =
+    {dest.b(1), dest.b(2), dest.b(3), dest.b(4), dest.b(5)};
+  for (int i = l; i <= r; i++) {
+    if (shift_left) {
+      b[i-l] = src.b(i);
+    } else if (shift_right) {
+      b[5-r+i-1] = src.b(i);
+    } else {
+      b[i-1] = src.b(i);
+    }
+  }
+  Word w(s,b);
+  w._ov = src._ov || dest._ov;
+  return w;
 }
 
 Word::operator int() const {
@@ -208,7 +217,7 @@ Word::operator int() const {
 }
 
 Word Word::operator+(Word w) const {
-  Word sum = (int) *this + (int) w;
+  Word sum = ((int) *this) + ((int) w);
   if (*this == 0) {
     sum._s = this->_s;
   }
@@ -222,7 +231,7 @@ Word Word::operator-() const {
 }
 
 // I/O helpers
-// in "pretty print format"
+// in "book print format"
 std::istream& operator>>(std::istream& in, Word &w) {
   std::string raw_sgn;
   std::vector<Byte> b(5);
@@ -448,7 +457,7 @@ bool cmpop(int c) {
 }
 
 int Mix::execute(Word w) {
-  Word aa = w.field(0, 2, false, true);
+  Word aa = w.field(0, 2);
   int i = w.b(3);
   int f = w.b(4);
   int c = w.b(5);
@@ -458,10 +467,12 @@ int Mix::execute(Word w) {
     return -1;
   }
 
-  int m = (int) aa;
+  Word m = aa;
   if (i > 0) {
-    m += (int) core->i[i-1];
+    m = m + core->i[i-1];
   }
+  // Note: if m == 0, m has same sign as aa
+
   // validate m
   if (
       // All arithmetic, memory, jump, cmp, and MOVE
@@ -514,19 +525,60 @@ int Mix::execute(Word w) {
   Word mem_dummy = 0;
   Word& mem = (m >= 0 && m < 4000) ? core->memory[m] : mem_dummy;
 
-  int next_pc = pc + 1;
+  int next_pc = (pc + 1) % 4000;
+  bool jump = false;
   if (c == 0) {
     // NOP
+  } else if (c == 1) {
+    // ADD
+    core->a = core->a + mem;
+  } else if (c == 2) {
+    // SUB
+    core->a = core->a + (-mem);
+  } else if (c >= 3 && c < 8) {
+    // MUL, DIV, special, shift, MOVE
+    // TODO
+    D("Not yet implemented!");
   } else if (c >= 8 && c < 16) {
     // Load (LD*)
-    reg = {0, mem, l, r, true, false, true};
+    reg = mem.field(l, r);
   } else if (c >= 16 && c < 24) {
     // Load negative (LD*N)
-    reg = {0, -(int)mem, l, r, true, false, true};
-    // TODO: undefined behavior on index registers.
+    reg = (-mem).field(l, r);
   } else if (c >= 24 && c < 32) {
     // Store (ST*)
-    mem = {mem, reg, l, r, false, true, false};
+    mem = mem.with_field(reg, l, r);
+  } else if (c == 32) {
+    // STJ
+    mem = mem.with_field(core->j, l, r);
+  } else if (c == 33) {
+    // STZ
+    mem = mem.with_field(0, l, r);
+  } else if (c >= 34 && c < 39) {
+    // io ops TODO
+    D("Not yet implemented!");
+  } else if (c == 39) {
+    // Global jumps
+    if (f == 1) {
+      // JSJ
+      jump = true;
+    } else if (f == 2 && core->overflow == Overflow::ON) {
+      // JOV
+      core->overflow = Overflow::OFF;
+      core->j = next_pc;
+      jump = true;
+    } else if (
+        (f == 0) || // JMP
+        (f == 3 && core->overflow == Overflow::OFF) || // JNOV
+        (f == 4 && core->comp == Comp::LESS) || // JL
+        (f == 5 && core->comp == Comp::EQUAL) || // JE
+        (f == 6 && core->comp == Comp::GREATER) || // JG
+        (f == 7 && core->comp != Comp::LESS) || // JGE
+        (f == 8 && core->comp != Comp::EQUAL) || // JNE
+        (f == 9 && core->comp != Comp::GREATER)) { // JLE
+      core->j = next_pc;
+      jump = true;
+    }
   } else if (c >= 40 && c < 48) {
     // Register based jumps (J**)
     if ((f == 0 && reg < 0) || // J*N
@@ -536,12 +588,20 @@ int Mix::execute(Word w) {
         (f == 4 && reg != 0) || // J*NZ
         (f == 5 && reg <= 0)) { // J*NP
       core->j = next_pc;
-      next_pc = m;
+      jump = true;
     }
   } else if (c >= 48 && c < 56) {
     // Transfer operators
-    // TODO ...
+    if (f == 0) {
+      reg = reg.with_field(m, l, r)
+  } else if (c >= 56) {
+    // Comparison operators
+    //
   }
+  // TODO check pc for after jump instructions
+  // TODO check overflow
+  // set overflow toggle
+  // undefined behavior on index registers.
 
   return next_pc;
 }
