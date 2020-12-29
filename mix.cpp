@@ -701,8 +701,13 @@ int Mix::execute(Word w) {
 }
 
 void Mix::step(int i) {
-  pc = execute(core->memory[pc]);
-  // TODO
+  D2("Stepping through i instructions, i = ", i);
+  while (--i >= 0) {
+    int next_pc = execute(core->memory[pc]);
+    if (next_pc < 0)
+      return;
+    pc = next_pc;
+  }
 }
 
 void Mix::timestep(int t) {
@@ -710,7 +715,10 @@ void Mix::timestep(int t) {
 }
 
 void Mix::run() {
-  // TODO
+  D("Running until halt or error...");
+  do {
+    pc = execute(core->memory[pc]);
+  } while (pc >= 0);
 }
 
 void Mix::test() {
