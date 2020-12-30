@@ -377,7 +377,7 @@ public:
   void test();
 private:
   MixCore *core;
-  int pc;
+  int pc = 0;
   int core_fd = -1;
 };
 
@@ -736,10 +736,10 @@ void Mix::test() {
 
 void test_core() {
   D("test_core");
-  Mix mix("./test.core");
+  Mix mix("./out/test.core");
   mix.test();
   // manually verify core file to check that it's good
-  // $ xxd test.core | less
+  // $ xxd ./test/test.core | less
 }
 
 void test_dump() {
@@ -748,12 +748,22 @@ void test_dump() {
   Mix m(&core);
   // set some values
   m.test();
-  m.dump("./test_dump.txt");
+  m.dump("./out/dump_out.dump");
   // load into new machine
-  Mix m2("./test_dump.core");
-  m2.load("./test_dump.txt");
+  Mix m2("./out/dump.core");
+  m2.load("./out/dump_out.dump");
   // manually verify core file to check that it's good
-  // $ xxd test_dump.core | less
+  // $ xxd test/dump.core | less
+}
+
+void test_lda() {
+  D("test_lda");
+  MixCore core;
+  Mix m(&core);
+  // set some values
+  m.load("./test/lda.dump");
+  m.step(11);
+  m.dump("./out/lda_out.dump");
 }
 
 int main() {
