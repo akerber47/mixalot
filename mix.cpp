@@ -770,6 +770,7 @@ int main() {
   DBG_INIT();
   test_core();
   test_dump();
+  test_lda();
   DBG_CLOSE();
   return 0;
 }

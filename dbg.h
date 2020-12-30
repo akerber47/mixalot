@@ -8,7 +8,7 @@
 std::ofstream *log_fs = nullptr;
 
 void log_dbg_init() {
-  log_fs = new std::ofstream("./debug.log");
+  log_fs = new std::ofstream("./out/debug.log");
 }
 
 void log_dbg_close() {
