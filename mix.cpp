@@ -591,18 +591,92 @@ int Mix::execute(Word w) {
     }
   } else if (c == 5) {
     switch (f) {
-      case 2:
+      case 0: // NUM
+      {
+        unsigned long long num = 0;
+        for (int i = 1; i <= 5; i++)
+          num = (num * 10) + (core->a.b(i) % 10);
+        for (int i = 1; i <= 5; i++)
+          num = (num * 10) + (core->x.b(i) % 10);
+        if (num > WORD_MAX)
+          core->overflow = Overflow::ON;
+        Word w = (num % (WORD_MAX + 1));
+        std::vector<Byte> newa = {w.b(1), w.b(2), w.b(3), w.b(4), w.b(5)};
+        core->a = {core->a.sgn(), newa};
+        break;
+      }
+      case 1: // CHR
+      {
+        int num = (core->a >= 0 ? core->a : -core->a);
+        std::vector<Byte> newa = {0, 0, 0, 0, 0};
+        std::vector<Byte> newx = {0, 0, 0, 0, 0};
+        for (int i = 4; i >= 0; i--) {
+          newx[i] = num % 10;
+          num = num / 10;
+        }
+        for (int i = 4; i >= 0; i--) {
+          newa[i] = num % 10;
+          num = num / 10;
+        }
+        core->a = {core->a.sgn(), newa};
+        core->x = {core->x.sgn(), newx};
+        break;
+      }
+      case 2: // HLT
         D("Halt!");
         return PC_HLT;
-      case 0: // NUM
-      case 1: // CHR
-      default:
-        D("Not yet implemented!");
     }
-  } else if (c >= 6 && c < 8) {
-    // shift, MOVE
-    // TODO
-    D("Not yet implemented!");
+  } else if (c == 6) {
+    // SL* vs SR* (negative vs positive index offset)
+    int sm = (f % 2 == 0) ? -m : m;
+    if (f < 2) { // SLA, SRA
+      std::vector<Byte> newa = {0, 0, 0, 0, 0};
+      for (int i = 0; i < 5; i++) {
+        if (i + sm >= 0 && i + sm < 5)
+          newa[i+sm] = core->a.b(i+1);
+      }
+      core->a = {core->a.sgn(), newa};
+    } else if (f >= 2 && f < 4) { // SLAX, SRAX
+      std::vector<Byte> newa = {0, 0, 0, 0, 0};
+      std::vector<Byte> newx = {0, 0, 0, 0, 0};
+      for (int i = 0; i < 10; i++) {
+        Byte bi = (i < 5) ? core->a.b(i+1) : core->x.b(i-5+1);
+        if (i + sm >= 0 && i + sm < 5)
+          newa[i+sm] = bi;
+        else if (i + sm >= 5 && i + sm < 10)
+          newx[i+sm-5] = bi;
+      }
+      core->a = {core->a.sgn(), newa};
+      core->x = {core->x.sgn(), newx};
+    } else { // SLC, SRC
+      std::vector<Byte> newa = {0, 0, 0, 0, 0};
+      std::vector<Byte> newx = {0, 0, 0, 0, 0};
+      for (int i = 0; i < 10; i++) {
+        Byte bi = (i < 5) ? core->a.b(i+1) : core->x.b(i-5+1);
+        if ((i+sm) % 10 < 5)
+          newa[(i+sm) % 10] = bi;
+        else
+          newx[((i+sm) % 10) - 5] = bi;
+      }
+      core->a = {core->a.sgn(), newa};
+      core->x = {core->x.sgn(), newx};
+    }
+  } else if (c == 7) {
+    // MOVE
+    for (int k = 0; k < f; k++) {
+      int k0 = ((int) m) + k;
+      int k1 = ((int) core->i[0]) + k;
+      if (k0 < 0 || k1 < 0) {
+        D("Move command underflowed memory");
+        return PC_ERR;
+      }
+      if (k0 >= 4000 || k1 >= 4000) {
+        D("Move command overflowed memory");
+        return PC_ERR;
+      }
+      core->memory[k1] = core->memory[k0];
+    }
+    core->i[0] = core->i[0] + (Word)f;
   } else if (c >= 8 && c < 16) {
     // Load (LD*)
     reg = mem.field(l, r);
