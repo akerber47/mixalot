@@ -214,7 +214,7 @@ Word Word::with_field(Word src, int l, int r,
     {this->b(1), this->b(2), this->b(3), this->b(4), this->b(5)};
   for (int i = l; i <= r; i++) {
     if (shift_left) {
-      b[i-l] = src.b(i);
+      b[i-1] = src.b(5-r+i);
     } else if (shift_right) {
       b[5-r+i-1] = src.b(i);
     } else {
