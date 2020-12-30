@@ -37,9 +37,9 @@ void log_dbg_close() {
 )
 
 #define D(a) _DBG_WRAP(a)
-#define D2(a,b) _DBG_WRAP(a << b)
-#define D3(a,b,c) _DBG_WRAP(a << b << c)
-#define D4(a,b,c,d) _DBG_WRAP(a << b << c << d)
-#define D5(a,b,c,d,e) _DBG_WRAP(a << b << c << d << e)
-#define D6(a,b,c,d,e,f) _DBG_WRAP(a << b << c << d << e << f)
+#define D2(a,b) D(a << ", " << b)
+#define D3(a,b,c) D2(a << ", " << b, c)
+#define D4(a,b,c,d) D3(a << ", " << b, c, d)
+#define D5(a,b,c,d,e) D4(a << ", " << b, c, d, e)
+#define D6(a,b,c,d,e,f) D5(a << ", " << b, c, d, e, f)
 

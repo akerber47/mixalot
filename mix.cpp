@@ -393,7 +393,7 @@ void Mix::load(std::string filename) {
     } else if (s[0] == 'I') {
       int i = stoi(s.substr(2, 1));
       if (i >= 1 && i <= 6) {
-        fs >> core->i[i];
+        fs >> core->i[i-1];
       } else {
         fs.setstate(std::ios_base::failbit);
       }
@@ -703,6 +703,7 @@ int Mix::execute(Word w) {
 void Mix::step(int i) {
   D2("Stepping through i instructions, i = ", i);
   while (--i >= 0) {
+    D2("Executing instruction at pc", pc);
     int next_pc = execute(core->memory[pc]);
     if (next_pc < 0)
       return;
@@ -717,7 +718,10 @@ void Mix::timestep(int t) {
 void Mix::run() {
   D("Running until halt or error...");
   do {
+    D2("Executing instruction at pc", pc);
+    D2("Mix registers:", to_str(true, false, false));
     pc = execute(core->memory[pc]);
+
   } while (pc >= 0);
 }
 
@@ -748,10 +752,10 @@ void test_dump() {
   Mix m(&core);
   // set some values
   m.test();
-  m.dump("./out/dump_out.dump");
+  m.dump("./out/dump_out.mix");
   // load into new machine
   Mix m2("./out/dump.core");
-  m2.load("./out/dump_out.dump");
+  m2.load("./out/dump_out.mix");
   // manually verify core file to check that it's good
   // $ xxd test/dump.core | less
 }
@@ -761,16 +765,27 @@ void test_lda() {
   MixCore core;
   Mix m(&core);
   // set some values
-  m.load("./test/lda.dump");
+  m.load("./test/lda.mix");
   m.step(11);
-  m.dump("./out/lda_out.dump");
+  m.dump("./out/lda_out.mix");
+}
+
+void test_max() {
+  D("test_max");
+  MixCore core;
+  Mix m(&core);
+  // set some values
+  m.load("./test/max.mix");
+  m.run();
+  m.dump("./out/max_out.mix");
 }
 
 int main() {
   DBG_INIT();
-  test_core();
-  test_dump();
-  test_lda();
+  // test_core();
+  // test_dump();
+  // test_lda();
+  test_max();
   DBG_CLOSE();
   return 0;
 }
