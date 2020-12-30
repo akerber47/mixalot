@@ -654,14 +654,14 @@ int Mix::execute(Word w) {
   } else if (c >= 48 && c < 56) {
     // Transfer operators
     switch (f) {
-      case 1: // ENT*
-        reg = m; break;
-      case 2: // ENN*
-        reg = -m; break;
-      case 3: // INC*
+      case 0: // INC*
         reg = reg + m; break;
-      case 4: // DEC*
+      case 1: // DEC*
         reg = reg + (-m); break;
+      case 2: // ENT*
+        reg = m; break;
+      case 3: // ENN*
+        reg = -m; break;
     }
   } else {
     // Comparison operators
