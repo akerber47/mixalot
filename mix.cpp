@@ -2,7 +2,7 @@
 #include <string>
 #include <fstream>
 #include <sstream>
-#include "io.h"
+#include "sys.h"
 #include "dbg.h"
 
 enum class Sign { POS, NEG };
@@ -18,6 +18,9 @@ constexpr int BYTE_MAX = 077;
 constexpr int ADDR_MAX = 07777;
 constexpr int WORD_MAX = 07777777777;
 constexpr long long DWORD_MAX = 077777777777777777777;
+
+#define NUM2CHR(n) ((n)+30)
+#define CHR2NUM(c) ((c)-30)
 
 /*
  * Represents a MIX word (5 unsigned 6-bit bytes, and a sign.)

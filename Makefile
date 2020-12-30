@@ -3,7 +3,7 @@ BINS=mix
 
 all: $(BINS)
 
-mix: mix.o io.o
+mix: mix.o sys.o
 
 CXX=clang++
 CXXFLAGS=--std=c++20 -g -Wall -Wextra
