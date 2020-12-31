@@ -16,11 +16,18 @@ struct DevInfo {
   bool can_output;
 };
 
+/*
+ * Memory: 4x10^3 words
+ * Tape: 4x10^6 words
+ * Disk: 1x10^5 words
+ * Paper tape: 1x10^5 words
+ */
+
 DevInfo DEV_MAGNETIC_TAPE = {
   Format::BINARY,
   StorageType::FIXED_SIZE,
   100,
-  1000000, // TODO look up realistic numbers
+  40000,
   true,
   true,
 };
@@ -29,7 +36,7 @@ DevInfo DEV_DISK = {
   Format::BINARY,
   StorageType::FIXED_SIZE,
   100,
-  100000, // TODO look up realistic numbers
+  100,
   true,
   true,
 };
@@ -74,7 +81,7 @@ DevInfo DEV_PAPER_TAPE = {
   Format::CHAR,
   StorageType::FIXED_SIZE,
   14,
-  100000, // TODO look up realistic numbers
+  1000,
   true,
   true,
 };
