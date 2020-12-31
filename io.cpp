@@ -1,7 +1,9 @@
-#include <unistd.h>
+#include <string>
+#include <vector>
+#include "sys.h"
 
-enum class Format = { BINARY, CHAR, CARD };
-enum class StorageType = { FIXED_SIZE, STREAM };
+enum class Format { BINARY, CHAR, CARD };
+enum class StorageType { FIXED_SIZE, STREAM };
 
 // High level info per device
 struct DevInfo {
@@ -84,13 +86,15 @@ DevInfo DEV_PAPER_TAPE = {
  */
 class MixDev {
 public:
+  // FIXED_SIZE -> open and set size to sz
+  // STREAM -> open with append mode, and don't set size
   MixDev(std::string filename, StorageType storage, size_t sz);
   ~MixDev();
-  // Read a block into the given dest of the given size
+  // Read data into the given dest of the given size
   // (in bytes), from the given offset in the device file.
   // If off is -1, don't seek before reading.
   void read_block(void *dest, int off, size_t sz);
-  // Write a block from the given src of the given size
+  // Write data from the given src of the given size
   // (in bytes), to the given offset in the device file.
   // If off is -1, don't seek before writing.
   void write_block(void *src, int off, size_t sz);
@@ -110,12 +114,12 @@ MixDev::~MixDev() {
     close(fd);
 }
 
-MixDev::read_block(void *dest, int off, size_t sz) {
-  seek_read(fd, dest, off, sz);
+void MixDev::read_block(void *dest, int off, size_t sz) {
+  (void) seek_read(fd, dest, off, sz);
 }
 
-MixDev::write_block(void *src, int off, size_t sz) {
-  seek_write(fd, src, off, sz);
+void MixDev::write_block(void *src, int off, size_t sz) {
+  (void) seek_write(fd, src, off, sz);
 }
 
 class MixIO {

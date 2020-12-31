@@ -37,14 +37,11 @@ int open_append(std::string filename);
 int seek_read(int fd, void *buf, int off, size_t sz);
 int seek_write(int fd, void *buf, int off, size_t sz);
 
-/*
- * Seek to the given position and write
- * Throw Sys_error on failure (containing errno).
- * Return number of bytes written.
- */
-
 class Sys_error {
 public:
   Sys_error(int err) : err(err) {}
   int err;
 };
+
+// re-declare
+int close(int fd);
