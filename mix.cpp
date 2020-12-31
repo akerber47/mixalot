@@ -371,7 +371,7 @@ public:
    */
   int execute(Word w);
   void step(int i);
-  void timestep(int t);
+  int tick(int t);
   void run();
   // Manually set some test values to check orchestration code
   void test();
@@ -785,7 +785,7 @@ void Mix::step(int i) {
   }
 }
 
-void Mix::timestep(int t) {
+int Mix::tick(int ts) {
   // TODO
 }
 

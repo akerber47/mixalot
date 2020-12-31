@@ -1,10 +1,127 @@
+#include <unistd.h>
+
+enum class Format = { BINARY, CHAR, CARD };
+enum class StorageType = { FIXED_SIZE, STREAM };
+
+// High level info per device
+struct DevInfo {
+  Format fmt;
+  StorageType storage;
+  int block_size;
+  int num_blocks; // only for FIXED_SIZE devices
+  bool can_input;
+  bool can_output;
+};
+
+DevInfo DEV_MAGNETIC_TAPE = {
+  Format::BINARY,
+  StorageType::FIXED_SIZE,
+  100,
+  1000000, // TODO look up realistic numbers
+  true,
+  true,
+};
+
+DevInfo DEV_DISK = {
+  Format::BINARY,
+  StorageType::FIXED_SIZE,
+  100,
+  100000, // TODO look up realistic numbers
+  true,
+  true,
+};
+
+DevInfo DEV_CARD_READER = {
+  Format::CARD,
+  StorageType::STREAM,
+  16,
+  0,
+  true,
+  false,
+};
+
+DevInfo DEV_CARD_PUNCH = {
+  Format::CARD,
+  StorageType::STREAM,
+  16,
+  0,
+  false,
+  true,
+};
+
+DevInfo DEV_LINE_PRINTER = {
+  Format::CHAR,
+  StorageType::STREAM,
+  24,
+  0,
+  false,
+  true,
+};
+
+DevInfo DEV_TERMINAL = {
+  Format::CHAR,
+  StorageType::STREAM,
+  14,
+  0,
+  true,
+  true,
+};
+
+DevInfo DEV_PAPER_TAPE = {
+  Format::CHAR,
+  StorageType::FIXED_SIZE,
+  14,
+  100000, // TODO look up realistic numbers
+  true,
+  true,
+};
+
+/*
+ * Lightweight low-level resource object per device
+ * to handle file descriptor read/write/seek
+ *
+ * Don't handle errors gracefully, just throw errors -> terminate.
+ */
+class MixDev {
+public:
+  MixDev(std::string filename, StorageType storage, size_t sz);
+  ~MixDev();
+  // Read a block into the given dest of the given size
+  // (in bytes), from the given offset in the device file.
+  // If off is -1, don't seek before reading.
+  void read_block(void *dest, int off, size_t sz);
+  // Write a block from the given src of the given size
+  // (in bytes), to the given offset in the device file.
+  // If off is -1, don't seek before writing.
+  void write_block(void *src, int off, size_t sz);
+private:
+  int fd = -1;
+};
+
+MixDev::MixDev(std::string filename, StorageType storage, size_t sz) {
+  if (storage == StorageType::FIXED_SIZE)
+    fd = open_and_resize(filename, sz);
+  else
+    fd = open_append(filename);
+}
+
+MixDev::~MixDev() {
+  if (fd != -1)
+    close(fd);
+}
+
+MixDev::read_block(void *dest, int off, size_t sz) {
+  seek_read(fd, dest, off, sz);
+}
+
+MixDev::write_block(void *src, int off, size_t sz) {
+  seek_write(fd, src, off, sz);
+}
 
 class MixIO {
 public:
-  // In-memory core (owned by caller)
-  // Custom device file maps
   MixIO(
-      MixCore *core,
+      MixCore *core, // owned by caller
       std::string tape_prefix = "./dev/t",
       int tape_n = 8,
       std::string disk_prefix = "./dev/d",
@@ -14,47 +131,21 @@ public:
       std::string line_printer = "./dev/lp0",
       std::string paper_tape = "./dev/pt0"
   );
-  ~MixIO();
 
-  /*
-   * Load a debug dump and output it through the given
-   * I/O device. Only valid for output-capable devices.
-   * Skip all invalid lines.
-   */
-  void load_out(int dev, int blocknum, std::string filename);
-
-  /*
-   * Dump a debug dump of the given I/O device input.
-   * Only valid for input-capable devices.
-   * See above.
-   */
-  void in_dump(int dev, int blocknum, std::string filename);
-
-  /*
-   * Execute I/O instructions.
-   */
-  int in(int dev, int blocknum);
-  int out(int dev, int blocknum);
-  int ioc(int dev, int f);
+  int execute(Word w);
+  int begin_execute(Word w);
+  int tick(int ts);
 
 private:
   MixCore *core;
-
+  int num_devs;
+  // Per device controller data
+  std::vector<MixDev> dev;
+  std::vector<DevInfo> info;
+  // ongoing execution
+  std::vector<int> finish_ts;
+  std::vector<Word> cur_inst;
 };
-
-enum clas Format = { BINARY, CHAR, CARD };
-
-class MixDev {
-public:
-  MixDev(std::string filename, Format fmt);
-private:
-  Format fmt;
-  bool supports_in;
-  bool supports_out;
-  bool random_access;
-  int fd = -1;
-
-
 
 std::vector<char> CHR_TABLE = {
   ' ', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I',
