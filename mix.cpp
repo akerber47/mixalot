@@ -19,9 +19,6 @@ constexpr int ADDR_MAX = 07777;
 constexpr int WORD_MAX = 07777777777;
 constexpr long long DWORD_MAX = 077777777777777777777;
 
-#define NUM2CHR(n) ((n)+30)
-#define CHR2NUM(c) ((c)-30)
-
 /*
  * Represents a MIX word (5 unsigned 6-bit bytes, and a sign.)
  * Representation:
@@ -611,11 +608,11 @@ int Mix::execute(Word w) {
         std::vector<Byte> newa = {0, 0, 0, 0, 0};
         std::vector<Byte> newx = {0, 0, 0, 0, 0};
         for (int i = 4; i >= 0; i--) {
-          newx[i] = num % 10;
+          newx[i] = 30 + (num % 10);
           num = num / 10;
         }
         for (int i = 4; i >= 0; i--) {
-          newa[i] = num % 10;
+          newa[i] = 30 + (num % 10);
           num = num / 10;
         }
         core->a = {core->a.sgn(), newa};
