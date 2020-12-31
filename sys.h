@@ -37,11 +37,14 @@ int open_append(std::string filename);
 int seek_read(int fd, void *buf, int off, size_t sz);
 int seek_write(int fd, void *buf, int off, size_t sz);
 
+/*
+ * Close without error handling
+ */
+void close_noerr(int fd);
+
 class Sys_error {
 public:
   Sys_error(int err) : err(err) {}
   int err;
 };
 
-// re-declare
-int close(int fd);

@@ -4,16 +4,10 @@
 #define LOG_DEBUG 1
 
 #ifdef LOG_DEBUG
+extern std::ofstream *log_fs;
+void log_dbg_init();
+void log_dbg_close();
 
-std::ofstream *log_fs = nullptr;
-
-void log_dbg_init() {
-  log_fs = new std::ofstream("./out/debug.log");
-}
-
-void log_dbg_close() {
-  delete log_fs;
-}
 #define DBG_INIT() log_dbg_init()
 #define _DBG_STREAM *log_fs
 #define DBG_CLOSE() log_dbg_close()

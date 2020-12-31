@@ -1,6 +1,7 @@
 #include <string>
 #include <vector>
 #include "sys.h"
+#include "core.h"
 
 enum class Format { BINARY, CHAR, CARD };
 enum class StorageType { FIXED_SIZE, STREAM };
@@ -111,7 +112,7 @@ MixDev::MixDev(std::string filename, StorageType storage, size_t sz) {
 
 MixDev::~MixDev() {
   if (fd != -1)
-    close(fd);
+    close_noerr(fd);
 }
 
 void MixDev::read_block(void *dest, int off, size_t sz) {

@@ -21,7 +21,7 @@ void open_and_map(
   }
   map = mmap(nullptr, sz, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
   if (map == MAP_FAILED) {
-    close(fd);
+    close_noerr(fd);
     throw Sys_error(errno);
   }
 }
@@ -29,7 +29,7 @@ void open_and_map(
 void unmap_and_close(void *map, size_t sz, int fd) {
   msync(map, sz, MS_SYNC);
   munmap(map, sz);
-  close(fd);
+  close_noerr(fd);
 }
 
 int open_and_resize(std::string filename, size_t sz) {
@@ -73,4 +73,8 @@ int seek_write(int fd, void *buf, int off, size_t sz) {
   if (ret == -1)
     throw Sys_error(errno);
   return ret;
+}
+
+void close_noerr(int fd) {
+  (void) close(fd);
 }
