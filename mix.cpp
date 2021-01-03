@@ -41,6 +41,7 @@ public:
   // manually set some values for orchestration test
   void test();
   void step(int i);
+  void timestep(int i);
   void run();
   void do_repl();
 private:
@@ -62,6 +63,7 @@ Mix::Mix(MixCore *core) {
 
 Mix::Mix(std::string core_file) {
   void *raw_core = nullptr;
+  D2("Initializing core at", core_file);
   open_and_map(
     core_file,
     sizeof(MixCore),
@@ -171,6 +173,17 @@ void Mix::step(int i) {
   }
 }
 
+void Mix::timestep(int i) {
+  D2("Stepping through i time steps, i = ", i);
+  while (--i >= 0) {
+    int ret = clock->tick();
+    if (ret < 0) {
+      D2("Failure/halt in clock tick, halting, code ", ret);
+      return;
+    }
+  }
+}
+
 void Mix::run() {
   D("Running until halt or error...");
   while(true) {
@@ -240,12 +253,50 @@ void test_max() {
   m.dump("./out/max_out.mix");
 }
 
+void do_repl() {
+  Mix mix("./dev/core");
+  while (true) {
+    std::string cmd;
+    std::cin >> cmd;
+    if (cmd == "run") {
+      mix.run();
+    } else if (cmd == "step") {
+      int ct;
+      std::cin >> ct;
+      mix.step(ct);
+    } else if (cmd == "timestep") {
+      int ct;
+      std::cin >> ct;
+      mix.timestep(ct);
+    } else if (cmd == "load") {
+      std::string filename;
+      std::cin >> filename;
+      mix.load(filename);
+    } else if (cmd == "dump") {
+      std::string filename;
+      std::cin >> filename;
+      mix.dump(filename);
+    } else if (cmd == "registers") {
+      std::cout << mix.to_str(true, false, false) << std::endl;
+    } else if (cmd == "memory") {
+      std::cout << mix.to_str(false, true, false) << std::endl;
+    } else if (cmd == "memory_zero") {
+      std::cout << mix.to_str(false, true, true) << std::endl;
+    } else if (cmd == "") {
+      return;
+    } else {
+      std::cout << "Unknown command!" << std::endl;
+    }
+  }
+}
+
 int main() {
   DBG_INIT();
   // test_core();
   // test_dump();
   // test_lda();
-  test_max();
+  // test_max();
+  do_repl();
   DBG_CLOSE();
   return 0;
 }

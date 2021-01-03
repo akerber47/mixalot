@@ -111,6 +111,7 @@ DevInfo DEV_PAPER_TAPE = {
 
 
 MixDev::MixDev(std::string filename, StorageType storage, size_t sz) {
+  D2("Initializing device file ", filename);
   if (storage == StorageType::FIXED_SIZE)
     fd = open_and_resize(filename, sz);
   else
@@ -141,6 +142,7 @@ MixIO::MixIO(
     std::string paper_tape
 ) {
   this->core = core;
+  D2("Initializing device files, num = ", NUM_DEVICES);
   for (int i = 0; i < NUM_DEVICES; i++) {
     do_io_ts.push_back(-1);
     finish_ts.push_back(-1);
@@ -430,5 +432,6 @@ int MixIO::do_io(Word w) {
       pos[f] = 0;
     }
   }
+  return 0;
 }
 
