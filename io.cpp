@@ -1,20 +1,15 @@
 #include <string>
+#include <sstream>
 #include <vector>
+#include "dbg.h"
 #include "sys.h"
 #include "core.h"
+#include "io.h"
+#include "cpu.h"
+#include "clock.h"
 
-enum class Format { BINARY, CHAR, CARD };
-enum class StorageType { FIXED_SIZE, STREAM };
 
-// High level info per device
-struct DevInfo {
-  Format fmt;
-  StorageType storage;
-  int block_size;
-  int num_blocks; // only for FIXED_SIZE devices
-  bool can_input;
-  bool can_output;
-};
+constexpr int NUM_DEVICES = 21;
 
 /*
  * Memory: 4x10^3 words
@@ -30,6 +25,8 @@ DevInfo DEV_MAGNETIC_TAPE = {
   40000,
   true,
   true,
+  500,
+  1000,
 };
 
 DevInfo DEV_DISK = {
@@ -39,6 +36,8 @@ DevInfo DEV_DISK = {
   100,
   true,
   true,
+  500,
+  1000
 };
 
 DevInfo DEV_CARD_READER = {
@@ -48,6 +47,8 @@ DevInfo DEV_CARD_READER = {
   0,
   true,
   false,
+  5000,
+  10000
 };
 
 DevInfo DEV_CARD_PUNCH = {
@@ -57,6 +58,8 @@ DevInfo DEV_CARD_PUNCH = {
   0,
   false,
   true,
+  10000,
+  20000
 };
 
 DevInfo DEV_LINE_PRINTER = {
@@ -66,6 +69,8 @@ DevInfo DEV_LINE_PRINTER = {
   0,
   false,
   true,
+  3750,
+  7500
 };
 
 DevInfo DEV_TERMINAL = {
@@ -75,6 +80,8 @@ DevInfo DEV_TERMINAL = {
   0,
   true,
   true,
+  3750,
+  7500
 };
 
 DevInfo DEV_PAPER_TAPE = {
@@ -84,31 +91,10 @@ DevInfo DEV_PAPER_TAPE = {
   1000,
   true,
   true,
+  3750,
+  7500
 };
 
-/*
- * Lightweight low-level resource object per device
- * to handle file descriptor read/write/seek
- *
- * Don't handle errors gracefully, just throw errors -> terminate.
- */
-class MixDev {
-public:
-  // FIXED_SIZE -> open and set size to sz
-  // STREAM -> open with append mode, and don't set size
-  MixDev(std::string filename, StorageType storage, size_t sz);
-  ~MixDev();
-  // Read data into the given dest of the given size
-  // (in bytes), from the given offset in the device file.
-  // If off is -1, don't seek before reading.
-  void read_block(void *dest, int off, size_t sz);
-  // Write data from the given src of the given size
-  // (in bytes), to the given offset in the device file.
-  // If off is -1, don't seek before writing.
-  void write_block(void *src, int off, size_t sz);
-private:
-  int fd = -1;
-};
 
 MixDev::MixDev(std::string filename, StorageType storage, size_t sz) {
   if (storage == StorageType::FIXED_SIZE)
@@ -130,34 +116,122 @@ void MixDev::write_block(void *src, int off, size_t sz) {
   (void) seek_write(fd, src, off, sz);
 }
 
-class MixIO {
-public:
-  MixIO(
-      MixCore *core, // owned by caller
-      std::string tape_prefix = "./dev/t",
-      int tape_n = 8,
-      std::string disk_prefix = "./dev/d",
-      int disk_n = 8,
-      std::string card_punch = "./dev/cp0",
-      std::string card_reader = "./dev/cr0",
-      std::string line_printer = "./dev/lp0",
-      std::string paper_tape = "./dev/pt0"
-  );
+MixIO::MixIO(
+    MixCore *core, // owned by caller
+    std::string tape_prefix,
+    std::string disk_prefix,
+    std::string card_punch,
+    std::string card_reader,
+    std::string line_printer,
+    std::string terminal,
+    std::string paper_tape
+) {
+  this->core = core;
+  for (int i = 0; i < NUM_DEVICES; i++) {
+    do_io_ts.push_back(-1);
+    finish_ts.push_back(-1);
+    cur_inst.push_back(0);
+    std::stringstream ss;
+    if (i >= 0 && i < 8) {
+      info.push_back(DEV_MAGNETIC_TAPE);
+      ss << tape_prefix << i;
+    } else if (i >= 8 && i < 16) {
+      info.push_back(DEV_DISK);
+      ss << disk_prefix << (i-8);
+    } else if (i == 16) {
+      info.push_back(DEV_CARD_READER);
+      ss << card_reader;
+    } else if (i == 17) {
+      info.push_back(DEV_CARD_PUNCH);
+      ss << card_punch;
+    } else if (i == 18) {
+      info.push_back(DEV_LINE_PRINTER);
+      ss << line_printer;
+    } else if (i == 19) {
+      info.push_back(DEV_TERMINAL);
+      ss << terminal;
+    } else if (i == 20) {
+      info.push_back(DEV_PAPER_TAPE);
+      ss << paper_tape;
+    }
+    std::string filename = ss.str();
 
-  int execute(Word w);
-  int begin_execute(Word w);
-  int tick(int ts);
 
-private:
-  MixCore *core;
-  int num_devs;
-  // Per device controller data
-  std::vector<MixDev> dev;
-  std::vector<DevInfo> info;
-  // ongoing execution
-  std::vector<int> finish_ts;
-  std::vector<Word> cur_inst;
-};
+    if (info[i].storage == StorageType::FIXED_SIZE) {
+      dev.emplace_back(
+          filename,
+          StorageType::FIXED_SIZE,
+          info[i].block_size * info[i].num_blocks * sizeof(Word)
+      );
+    } else {
+      dev.emplace_back(
+          filename,
+          StorageType::STREAM,
+          0
+      );
+    }
+  }
+}
+
+int MixIO::execute(Word w) {
+  Word aa = w.field(0, 2);
+  int i = w.b(3); // already validated
+  int f = w.b(4);
+  int c = w.b(5);
+
+  // validate f
+  if (f >= NUM_DEVICES) {
+    D3("Invalid f", f, w);
+    return IO_ERR;
+  }
+
+  // validate m
+  Word m = aa;
+  if (i > 0) {
+    m = m + core->i[i-1];
+  }
+  if ((c != 35) && (m < 0 || m >= MEM_SIZE)) {
+    D3("Invalid m, (m,w) = ", m, w);
+    return IO_ERR;
+  }
+  if (c == 35) {
+    // IOC for tape devices
+    if ((f < 8 && (((int)m) + pos[f] < 0 ||((int)m) + pos[f] >= info[f].num_blocks)) ||
+        // IOC for disk, printer, and paper tape devices
+        (f >= 8 && m != 0)) {
+      D3("Invalid m for IOC:", m, w);
+      return IO_ERR;
+    }
+  }
+
+  // validate x (for disk devices)
+  if (c <=  36 && f >= 8 && f < 16 &&
+      (core->x < 0 || core->x >= info[f].num_blocks)) {
+    D3("Invalid x for disk device", core->x, w);
+    return IO_ERR;
+  }
+
+  if (finish_ts[f] != -1) {
+    return IO_BLK;
+  }
+
+  do_io_ts[f] = clock->ts() + info[f].time_to_do_io;
+  finish_ts[f] = clock->ts() + info[f].time_to_finish;
+  cur_inst[f] = w;
+  return 0;
+}
+
+int MixIO::next_ts() {
+  int min = -1;
+  for (auto t : do_io_ts) {
+    min = (t < min && t >= clock->ts()) ? t : min;
+  }
+  for (auto t : finish_ts) {
+    min = (t < min && t >= clock->ts()) ? t : min;
+  }
+  return min;
+}
+
 
 std::vector<char> CHR_TABLE = {
   ' ', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I',
