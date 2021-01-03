@@ -338,12 +338,24 @@ int MixCPU::execute(Word w) {
     core->x = core->x.with_nov();
   }
 
+  return next_pc;
+}
+
+int MixCPU::tick() {
+  if (clock->ts() < pc_ts)
+    return 0;
+  int next_pc = execute(core->memory[pc]);
+  if (next_pc < 0)
+    return next_pc;
   pc = next_pc;
   return 0;
 }
 
-int MixCPU::tick() {
+int MixCPU::next_ts() {
+  pc_ts = get_time(core->memory[pc]);
+  // todo store it in member when requested
   // TODO
+  // business logic to compute next instruction
   return 0;
 }
 

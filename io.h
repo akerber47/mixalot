@@ -18,9 +18,20 @@ public:
       std::string paper_tape = "./dev/pt0"
   );
   void init (MixClock *clock);
+  /*
+   * Called by the CPU to execute I/O instructions
+   * (coprocess)
+   */
   int execute(Word w);
-  int do_io(Word w);
+  /*
+   * Perform the I/O operations and completions (if any)
+   * corresponding to the current clock tick.
+   */
   int tick();
+  /*
+   * Lookup the next clock tick on which the CPU will execute
+   * an instruction.
+   */
   int next_ts();
 
 private:
@@ -35,6 +46,7 @@ private:
   std::vector<Word> cur_inst;
   // only used for block devices
   std::vector<int> pos;
+  int do_io(Word w);
 };
 
 // Information below needed for compilation

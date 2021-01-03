@@ -1,3 +1,6 @@
+constexpr TICK_ERR = -1;
+constexpr TICK_HLT = -2;
+
 class MixIO;
 class MixCPU;
 
@@ -7,8 +10,11 @@ public:
   int ts() { return _ts; }
   int tick() {
     _ts++;
-    cpu->tick();
-    io->tick();
+    int ret;
+    if ((ret = cpu->tick()) < 0)
+      return ret;
+    if ((ret = io->tick()) < 0)
+      return ret;
     return _ts;
   }
   int next_ts() {

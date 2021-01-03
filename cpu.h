@@ -1,3 +1,6 @@
+struct MixCore;
+class MixClock;
+
 class MixCPU {
 public:
   MixCPU(MixCore *core);
@@ -10,7 +13,15 @@ public:
    * instruction (for debugging purposes).
    */
   int execute(Word w);
+  /*
+   * Perform the instruction (if any) corresponding to
+   * the current clock tick.
+   */
   int tick();
+  /*
+   * Lookup the next clock tick on which the CPU will execute
+   * an instruction.
+   */
   int next_ts();
 private:
   MixCore *core;
