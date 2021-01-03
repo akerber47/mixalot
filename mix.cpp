@@ -39,6 +39,8 @@ public:
       bool include_memory = false,
       bool include_zeros = false,
       bool include_exec = false);
+  // erase all values in the core (zero out memory)
+  void clean();
   // manually set some values for orchestration test
   void test();
   void step(int i);
@@ -204,6 +206,10 @@ void Mix::run() {
   }
 }
 
+void Mix::clean() {
+  zero_out(core, sizeof(*core));
+}
+
 void Mix::test() {
   core->a = 4;
   core->x = 5;
@@ -214,7 +220,6 @@ void Mix::test() {
   core->overflow = Overflow::ON;
   core->memory[0] = 0xdeadbeef;
   core->memory[3999] = 0xdeadbeef;
-
 }
 
 void test_core() {
@@ -277,6 +282,7 @@ void do_repl() {
       std::cout << "  memory_zero" << std::endl;
       std::cout << "  ts" << std::endl;
       std::cout << "  pc" << std::endl;
+      std::cout << "  clean" << std::endl;
     } else if (cmd == "run") {
       mix.run();
     } else if (cmd == "step") {
@@ -305,6 +311,8 @@ void do_repl() {
       std::cout << mix.to_str(false, false, false, true) << std::endl;
     } else if (cmd == "pc") {
       std::cout << mix.to_str(false, false, false, true) << std::endl;
+    } else if (cmd == "clean") {
+      mix.clean();
     } else if (cmd == "") {
       std::cout << std::endl;
       return;

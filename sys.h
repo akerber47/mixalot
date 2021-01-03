@@ -42,6 +42,11 @@ int seek_write(int fd, void *buf, int off, size_t sz);
  */
 void close_noerr(int fd);
 
+/*
+ * Wipe out with memset
+ */
+void zero_out(void *buf, size_t sz);
+
 class Sys_error {
 public:
   Sys_error(int err) : err(err) {}

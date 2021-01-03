@@ -2,6 +2,7 @@
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <unistd.h>
+#include <string.h>
 #include "sys.h"
 
 void open_and_map(
@@ -77,4 +78,8 @@ int seek_write(int fd, void *buf, int off, size_t sz) {
 
 void close_noerr(int fd) {
   (void) close(fd);
+}
+
+void zero_out(void *buf, size_t sz) {
+  (void) memset(buf, 0, sz);
 }
