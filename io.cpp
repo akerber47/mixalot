@@ -145,6 +145,7 @@ MixIO::MixIO(
     do_io_ts.push_back(-1);
     finish_ts.push_back(-1);
     cur_inst.push_back(0);
+    pos.push_back(0);
     std::string filename;
     if (i >= 0 && i < 8) {
       info.push_back(DEV_MAGNETIC_TAPE);
@@ -250,7 +251,7 @@ int MixIO::execute(Word w) {
   D4("Staging io op #C M F = ", c, m, f);
   // Special case: if f is a disk and is already in the right
   // place, time to execute is cut by DISK_SEEK_FACTOR
-  if (info[f].type == DevType::DISK && x == pos[f]) {
+  if (info[f].type == DevType::DISK && core->x == pos[f]) {
     do_io_ts[f] = clock->ts() + (info[f].time_to_do_io/DISK_SEEK_FACTOR);
     finish_ts[f] = clock->ts() + (info[f].time_to_finish/DISK_SEEK_FACTOR);
   } else {
@@ -384,10 +385,34 @@ int MixIO::do_io(Word w) {
     m = m + core->i[i-1];
   }
   D4("Running io op #C M F = ", c, m, f);
-  if (c == 35) { // IN
-    // TODO
-  } else if (c == 36) { // OUT
-    // TODO
+  if (c == 35 || c == 36) { // IN, OUT
+    int blocknum = -1;
+    if (info[f].storage == StorageType::FIXED_SIZE) {
+      if (info[f].type == DevType::DISK) {
+        // disks support random access
+        blocknum = core->x;
+      } else {
+        blocknum = pos[f];
+      }
+      pos[f] += 1; // block number will be incremented after read/write
+    }
+    if (info[f].fmt == Format::BINARY) {
+      if (c == 35) { // IN, binary
+        dev[f].read_block(
+            (void *)&core->memory[m],
+            blocknum * info[f].block_size * sizeof(Word),
+            info[f].block_size * sizeof(Word));
+      } else { // OUT, binary
+        dev[f].write_block(
+            (void *)&core->memory[m],
+            blocknum * info[f].block_size * sizeof(Word),
+            info[f].block_size * sizeof(Word));
+      }
+    } else if (info[f].fmt == Format::CHAR) {
+      // TODO
+    } else if (info[f].fmt == Format::CARD) {
+      // TODO
+    }
   } else if (c == 37) { // IOC
     if (info[f].type == DevType::MAGNETIC_TAPE) {
       if (m == 0)
@@ -395,10 +420,10 @@ int MixIO::do_io(Word w) {
       else
         pos[f] += m;
     } else if (info[f].type == DevType::DISK) {
-      pos[f] = x;
+      pos[f] = core->x;
     } else if (info[f].type == DevType::LINE_PRINTER) {
       dev[f].write_block(
-          LINE_PRINTER_CLEAR,
+          (void *)&LINE_PRINTER_CLEAR[0],
           -1,
           sizeof(LINE_PRINTER_CLEAR));
     } else if (info[f].type == DevType::PAPER_TAPE) {
