@@ -375,8 +375,12 @@ int assemble_next(std::string s) {
       D2("Unprintable characters passed to ALF:", addr);
       return -1;
     }
-    words[star++] = {Sign::POS, CHAR_TABLE[addr[0]], CHAR_TABLE[addr[1]],
-      CHAR_TABLE[addr[2]], CHAR_TABLE[addr[3]], CHAR_TABLE[addr[4]]},
+    words[star++] = {Sign::POS,
+      CHAR_TABLE[addr[0]],
+      CHAR_TABLE[addr[1]],
+      CHAR_TABLE[addr[2]],
+      CHAR_TABLE[addr[3]],
+      CHAR_TABLE[addr[4]]},
   } else {
     // look up opcode
     if (OP_TABLE.find(op) == OP_TABLE.end()) {
