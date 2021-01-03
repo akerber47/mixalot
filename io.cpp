@@ -11,6 +11,12 @@
 
 constexpr int NUM_DEVICES = 21;
 
+/*
+ * How much faster disk instructions will execute
+ * if the disk is already in the right place
+ * (ie, current position == requested position)
+ */
+constexpr int DISK_SEEK_FACTOR = 10;
 
 /*
  * Memory: 4x10^3 words
@@ -242,8 +248,15 @@ int MixIO::execute(Word w) {
   }
 
   D4("Staging io op #C M F = ", c, m, f);
-  do_io_ts[f] = clock->ts() + info[f].time_to_do_io;
-  finish_ts[f] = clock->ts() + info[f].time_to_finish;
+  // Special case: if f is a disk and is already in the right
+  // place, time to execute is cut by DISK_SEEK_FACTOR
+  if (info[f].type == DevType::DISK && x == pos[f]) {
+    do_io_ts[f] = clock->ts() + (info[f].time_to_do_io/DISK_SEEK_FACTOR);
+    finish_ts[f] = clock->ts() + (info[f].time_to_finish/DISK_SEEK_FACTOR);
+  } else {
+    do_io_ts[f] = clock->ts() + info[f].time_to_do_io;
+    finish_ts[f] = clock->ts() + info[f].time_to_finish;
+  }
   D2("Io op will run at", do_io_ts[f]);
   D2("Io device will be unblocked at", finish_ts[f]);
   cur_inst[f] = w;
@@ -356,6 +369,10 @@ std::map<char,int> CHR_REV_TABLE {
   {'\'', 55}
 };
 
+const char LINE_PRINTER_CLEAR[] =
+  "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+  "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n";
+
 int MixIO::do_io(Word w) {
   // All already validated
   Word aa = w.field(0, 2);
@@ -373,9 +390,19 @@ int MixIO::do_io(Word w) {
     // TODO
   } else if (c == 37) { // IOC
     if (info[f].type == DevType::MAGNETIC_TAPE) {
-      if (m == 0) {
-        // TODO
-      }
+      if (m == 0)
+        pos[f] = 0;
+      else
+        pos[f] += m;
+    } else if (info[f].type == DevType::DISK) {
+      pos[f] = x;
+    } else if (info[f].type == DevType::LINE_PRINTER) {
+      dev[f].write_block(
+          LINE_PRINTER_CLEAR,
+          -1,
+          sizeof(LINE_PRINTER_CLEAR));
+    } else if (info[f].type == DevType::PAPER_TAPE) {
+      pos[f] = 0;
     }
   }
 }
