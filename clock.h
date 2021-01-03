@@ -10,7 +10,10 @@ public:
   MixClock(MixCPU *cpu, MixIO *io) : cpu(cpu), io(io) {};
   int ts() { return _ts; }
   int tick() {
-    _ts++;
+    return tick_at(_ts + 1);
+  }
+  int tick_at(int new_ts) {
+    _ts = new_ts;
     int ret;
     if ((ret = cpu->tick()) < 0)
       return ret;

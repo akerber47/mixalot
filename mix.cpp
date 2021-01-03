@@ -42,6 +42,7 @@ public:
   void test();
   void step(int i);
   void run();
+  void do_repl();
 private:
   MixCore *core;
   MixCPU *cpu = nullptr;
@@ -156,30 +157,32 @@ void Mix::dump(std::string filename) {
   fs.close();
 }
 
-
 void Mix::step(int i) {
-  D2("Stepping through i instructions, i = ", i);
-  /* TODO
+  D2("Stepping through i operations, i = ", i);
   while (--i >= 0) {
-    D2("Executing instruction at pc", pc);
-    int next_pc = execute(core->memory[pc]);
-    if (next_pc < 0)
+    int next_ts = clock->next_ts();
+    D2("Next operation occurs at clock time ts", next_ts);
+    D2("Setting clock time to this ts and running tick", next_ts);
+    int ret = clock->tick_at(next_ts);
+    if (ret < 0) {
+      D2("Failure/halt in clock tick, halting, code ", ret);
       return;
-    pc = next_pc;
+    }
   }
-  */
 }
 
 void Mix::run() {
   D("Running until halt or error...");
-  /* TODO
-  do {
-    D2("Executing instruction at pc", pc);
-    D2("Mix registers:", to_str(true, false, false));
-    pc = execute(core->memory[pc]);
-
-  } while (pc >= 0);
-  */
+  while(true) {
+    int next_ts = clock->next_ts();
+    D2("Next operation occurs at clock time ts", next_ts);
+    D2("Setting clock time to this ts and running tick", next_ts);
+    int ret = clock->tick_at(next_ts);
+    if (ret < 0) {
+      D2("Failure/halt in clock tick, stopping, code ", ret);
+      return;
+    }
+  }
 }
 
 void Mix::test() {

@@ -350,13 +350,17 @@ int MixCPU::execute(Word w) {
 }
 
 int MixCPU::tick() {
-  if (clock->ts() < get_ts(core->memory[pc]))
+  if (clock->ts() < get_ts(core->memory[pc])) {
+    D("No CPU operation for this tick");
     return 0;
+  }
+  D2("Executing instruction at pc", pc);
   int next_pc = execute(core->memory[pc]);
   // set previous ts for execution
   previous_ts = clock->ts();
   if (next_pc < 0)
     return next_pc;
+  pc = next_pc;
   return 0;
 }
 
