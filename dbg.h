@@ -1,7 +1,7 @@
 #include <iostream>
 #include <string>
 #include <fstream>
-#define LOG_DEBUG 1
+#define LOG_DEBUG 0
 
 #ifdef LOG_DEBUG
 extern std::ofstream *log_fs;
