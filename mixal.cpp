@@ -251,6 +251,13 @@ int add_future(std::string symbol) {
   return ret;
 }
 
+// Clean futures by adding additional rows
+// (starting at *) that define the appropriate symbols
+// called at END
+void clean_futures() {
+  // TODO
+}
+
 
 // Parse "expression" (see Knuth)
 // Return 0 on success, -1 on error
@@ -365,8 +372,8 @@ int assemble_next(std::string s) {
     } else if (op == "CON") {
       words[star++] = w;
     } else if (op == "END") {
+      clean_futures();
       ended = true;
-      // end_futures();
     }
     return 0;
   } else if (op == "ALF") {
