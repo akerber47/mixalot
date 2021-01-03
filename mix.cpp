@@ -9,29 +9,14 @@
 #include "cpu.h"
 #include "clock.h"
 
-constexpr int PC_ERR = -1;
-constexpr int PC_HLT = -2;
 
 class Mix {
 public:
   // In-memory core (owned by caller)
-  Mix(MixCore *core) : core(core), io(nullptr) {};
+  Mix(MixCore *core);
   // Mapped core (owned by class)
-  Mix(std::string core_file) {
-    void *raw_core = nullptr;
-    open_and_map(
-      core_file,
-      sizeof(MixCore),
-      raw_core,
-      this->core_fd
-    );
-    this->core = static_cast<MixCore *>(raw_core);
-  }
-  ~Mix() {
-    if (core_fd != -1) {
-      unmap_and_close(core, sizeof(MixCore), core_fd);
-    }
-  }
+  Mix(std::string core_file);
+  ~Mix();
   /*
    * Load a core dump or program listing into the current
    * Mix machine. Skip all invalid lines.
@@ -61,8 +46,46 @@ private:
   MixCore *core;
   MixCPU *cpu = nullptr;
   MixIO *io = nullptr;
+  MixClock *clock = nullptr;
   int core_fd = -1;
 };
+
+Mix::Mix(MixCore *core) {
+  this->core = core;
+  cpu = new MixCPU(core);
+  io = new MixIO(core);
+  clock = new MixClock(cpu, io);
+  cpu->init(clock, io);
+  io->init(clock);
+}
+
+Mix::Mix(std::string core_file) {
+  void *raw_core = nullptr;
+  open_and_map(
+    core_file,
+    sizeof(MixCore),
+    raw_core,
+    this->core_fd
+  );
+  this->core = (MixCore *) raw_core;
+  cpu = new MixCPU(core);
+  io = new MixIO(core);
+  clock = new MixClock(cpu, io);
+  cpu->init(clock, io);
+  io->init(clock);
+}
+
+Mix::~Mix() {
+  if (clock != nullptr)
+    delete clock;
+  if (io != nullptr)
+    delete io;
+  if (cpu != nullptr)
+    delete cpu;
+  if (core_fd != -1) {
+    unmap_and_close(core, sizeof(MixCore), core_fd);
+  }
+}
 
 void Mix::load(std::string filename) {
   D2("loading ", filename);

@@ -173,6 +173,10 @@ MixIO::MixIO(
   }
 }
 
+void MixIO::init(MixClock *clock) {
+  this->clock = clock;
+}
+
 int MixIO::execute(Word w) {
   Word aa = w.field(0, 2);
   int i = w.b(3); // already validated

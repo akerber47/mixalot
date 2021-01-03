@@ -17,6 +17,7 @@ public:
       std::string terminal = "./dev/term0",
       std::string paper_tape = "./dev/pt0"
   );
+  void init (MixClock *clock);
   int execute(Word w);
   int do_io(Word w);
   int tick();

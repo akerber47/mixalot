@@ -11,6 +11,15 @@
 constexpr int PC_ERR = -1;
 constexpr int PC_HLT = -2;
 
+MixCPU::MixCPU(MixCore *core) {
+  this->core = core;
+}
+
+void MixCPU::init(MixClock *clock, MixIO *io) {
+  this->clock = clock;
+  this->io = io;
+}
+
 // operator classification helpers
 // Arithmetic: ADD, SUB, MUL, DIV
 bool arithop(int c) {
@@ -94,7 +103,6 @@ int MixCPU::execute(Word w) {
     D3("invalid field, (f,w) = ", f, w);
     return PC_ERR;
   }
-
 
   // If we've made it this far, the instruction is valid.
   // Execute it.
@@ -330,7 +338,8 @@ int MixCPU::execute(Word w) {
     core->x = core->x.with_nov();
   }
 
-  return next_pc;
+  pc = next_pc;
+  return 0;
 }
 
 int MixCPU::tick() {

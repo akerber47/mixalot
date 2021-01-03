@@ -1,6 +1,7 @@
-
 class MixCPU {
 public:
+  MixCPU(MixCore *core);
+  void init(MixClock *clock, MixIO *io);
   /*
    * Given a word, execute that word as though it's the current
    * instruction. Return the new value of the program counter.
@@ -15,6 +16,8 @@ private:
   MixCore *core;
   MixIO *io = nullptr;
   MixClock *clock = nullptr;
+  // program counter (current instruction)
   int pc = 0;
+
 };
 
