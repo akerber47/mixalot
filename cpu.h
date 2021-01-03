@@ -29,6 +29,11 @@ private:
   MixClock *clock = nullptr;
   // program counter (current instruction)
   int pc = 0;
-
+  // ts of previous exected instruction
+  // (used for timing purposes)
+  int previous_ts = 0;
+  // business logic to compute ts at which
+  // instruction will complete after previous ts
+  int get_ts(Word w);
 };
 

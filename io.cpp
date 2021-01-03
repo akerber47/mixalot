@@ -1,5 +1,4 @@
 #include <string>
-#include <sstream>
 #include <vector>
 #include "dbg.h"
 #include "sys.h"
@@ -131,31 +130,29 @@ MixIO::MixIO(
     do_io_ts.push_back(-1);
     finish_ts.push_back(-1);
     cur_inst.push_back(0);
-    std::stringstream ss;
+    std::string filename;
     if (i >= 0 && i < 8) {
       info.push_back(DEV_MAGNETIC_TAPE);
-      ss << tape_prefix << i;
+      filename = tape_prefix + std::to_string(i);
     } else if (i >= 8 && i < 16) {
       info.push_back(DEV_DISK);
-      ss << disk_prefix << (i-8);
+      filename = disk_prefix + std::to_string(i-8);
     } else if (i == 16) {
       info.push_back(DEV_CARD_READER);
-      ss << card_reader;
+      filename = card_reader;
     } else if (i == 17) {
       info.push_back(DEV_CARD_PUNCH);
-      ss << card_punch;
+      filename = card_punch;
     } else if (i == 18) {
       info.push_back(DEV_LINE_PRINTER);
-      ss << line_printer;
+      filename = line_printer;
     } else if (i == 19) {
       info.push_back(DEV_TERMINAL);
-      ss << terminal;
+      filename = terminal;
     } else if (i == 20) {
       info.push_back(DEV_PAPER_TAPE);
-      ss << paper_tape;
+      filename = paper_tape;
     }
-    std::string filename = ss.str();
-
 
     if (info[i].storage == StorageType::FIXED_SIZE) {
       dev.emplace_back(
@@ -225,8 +222,26 @@ int MixIO::execute(Word w) {
   return 0;
 }
 
+int MixIO::tick() {
+  int tick_ret = 0;
+  for (int d = 0; d < NUM_DEVICES; d++) {
+    if (clock->ts() == do_io_ts[d]) {
+      int ret;
+      if ((ret = do_io(cur_inst[d])) < 0)
+        tick_ret = ret;
+      do_io_ts[d] = -1;
+    }
+    if (clock->ts() == finish_ts[d]) {
+      finish_ts[d] = -1;
+      cur_inst[d] = 0;
+    }
+  }
+  return tick_ret;
+}
+
+
 int MixIO::next_ts() {
-  int min = -1;
+  int min = WORD_MAX;
   for (auto t : do_io_ts) {
     min = (t < min && t >= clock->ts()) ? t : min;
   }
@@ -234,6 +249,14 @@ int MixIO::next_ts() {
     min = (t < min && t >= clock->ts()) ? t : min;
   }
   return min;
+}
+
+int MixIO::free_ts(int f) {
+  if (f < 0 || f >= NUM_DEVICES) {
+    // invalid f, just pretend it's free to avoid weird IO block
+    return -1;
+  }
+  return finish_ts[f];
 }
 
 

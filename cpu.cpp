@@ -342,20 +342,49 @@ int MixCPU::execute(Word w) {
 }
 
 int MixCPU::tick() {
-  if (clock->ts() < pc_ts)
+  if (clock->ts() < get_ts(core->memory[pc]))
     return 0;
   int next_pc = execute(core->memory[pc]);
+  // set previous ts for execution
+  previous_ts = clock->ts();
   if (next_pc < 0)
     return next_pc;
-  pc = next_pc;
   return 0;
 }
 
 int MixCPU::next_ts() {
-  pc_ts = get_time(core->memory[pc]);
-  // todo store it in member when requested
-  // TODO
-  // business logic to compute next instruction
-  return 0;
+  return get_ts(core->memory[pc]);
 }
 
+int MixCPU::get_ts(Word w) {
+  int c = w.b(5);
+  int f = w.b(4);
+  int ts = previous_ts;
+  D5("Computing ts for word W (with C, F) given previous ts = ", w, c, f, ts);
+  if ((c == 1 || c == 2) || // ADD, SUB
+      (c == 6) || // Shift
+      (c >= 8 && c < 33) || // LD*, ST*
+      (c >= 56)) { // CMP*
+    ts += 2;
+  } else if ((c == 3) || // MUL
+      (c == 5 && (f == 0 || f == 1))) { // NUM, CHR
+    ts += 10;
+  } else if (c == 4) { // DIV
+    ts += 12;
+  } else if (c == 7) { // MOVE
+    ts += (1 + 2*f);
+  } else if ((c >= 35 && c < 38) || // blocking IO
+      (c == 34 && w.b(3) == 0 && w.field(0,2) == pc)) { // JBUS *
+    // Execute after device is free
+    int free_ts = io->free_ts(f);
+    if (free_ts < 0) {
+      ts += 1;
+    } else {
+      ts = free_ts + 1;
+    }
+  } else {
+    ts += 1;
+  }
+  D2("Found execution time ts", ts);
+  return ts;
+}

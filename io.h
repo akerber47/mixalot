@@ -33,6 +33,11 @@ public:
    * an instruction.
    */
   int next_ts();
+  /*
+   * Query first device free ts.
+   * Return 0 if device is currently free.
+   */
+  int free_ts(int f);
 
 private:
   MixCore *core;

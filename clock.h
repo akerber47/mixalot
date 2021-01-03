@@ -1,5 +1,6 @@
-constexpr TICK_ERR = -1;
-constexpr TICK_HLT = -2;
+constexpr int TICK_ERR = -1;
+constexpr int TICK_HLT = -2;
+constexpr int TICK_BUS = -3;
 
 class MixIO;
 class MixCPU;
