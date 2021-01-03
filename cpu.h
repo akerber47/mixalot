@@ -23,6 +23,8 @@ public:
    * an instruction.
    */
   int next_ts();
+
+  int get_pc() { return pc; }
 private:
   MixCore *core;
   MixIO *io = nullptr;

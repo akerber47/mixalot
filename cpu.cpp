@@ -358,6 +358,10 @@ int MixCPU::tick() {
   int next_pc = execute(core->memory[pc]);
   // set previous ts for execution
   previous_ts = clock->ts();
+  // If we're halting, be sure to start up with the next
+  // instruction upon resume
+  if (next_pc == PC_HLT)
+    pc += 1;
   if (next_pc < 0)
     return next_pc;
   pc = next_pc;

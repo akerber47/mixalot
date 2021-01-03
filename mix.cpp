@@ -37,7 +37,8 @@ public:
   std::string to_str(
       bool include_registers = true,
       bool include_memory = false,
-      bool include_zeros = false);
+      bool include_zeros = false,
+      bool include_exec = false);
   // manually set some values for orchestration test
   void test();
   void step(int i);
@@ -130,7 +131,8 @@ void Mix::load(std::string filename) {
 std::string Mix::to_str(
     bool include_registers,
     bool include_memory,
-    bool include_zeros) {
+    bool include_zeros,
+    bool include_exec) {
   std::stringstream ss;
   if (include_registers) {
     ss << "   A: " << core->a << std::endl;
@@ -148,6 +150,10 @@ std::string Mix::to_str(
         ss << i << ": " << core->memory[i] << std::endl;
       }
     }
+  }
+  if (include_exec) {
+    ss << "  TS: " << clock->ts() << std::endl;
+    ss << "  PC: " << cpu->get_pc() << std::endl;
   }
   return ss.str();
 }
@@ -256,9 +262,22 @@ void test_max() {
 void do_repl() {
   Mix mix("./dev/core");
   while (true) {
+    std::cout << "(mix) => ";
     std::string cmd;
     std::cin >> cmd;
-    if (cmd == "run") {
+    if (cmd == "help") {
+      std::cout << "Available commands:" << std::endl;
+      std::cout << "  run" << std::endl;
+      std::cout << "  step <i>" << std::endl;
+      std::cout << "  timestep <i>" << std::endl;
+      std::cout << "  load <filename>" << std::endl;
+      std::cout << "  dump <filename>" << std::endl;
+      std::cout << "  registers" << std::endl;
+      std::cout << "  memory" << std::endl;
+      std::cout << "  memory_zero" << std::endl;
+      std::cout << "  ts" << std::endl;
+      std::cout << "  pc" << std::endl;
+    } else if (cmd == "run") {
       mix.run();
     } else if (cmd == "step") {
       int ct;
@@ -277,12 +296,17 @@ void do_repl() {
       std::cin >> filename;
       mix.dump(filename);
     } else if (cmd == "registers") {
-      std::cout << mix.to_str(true, false, false) << std::endl;
+      std::cout << mix.to_str(true, false, false, true) << std::endl;
     } else if (cmd == "memory") {
       std::cout << mix.to_str(false, true, false) << std::endl;
     } else if (cmd == "memory_zero") {
       std::cout << mix.to_str(false, true, true) << std::endl;
+    } else if (cmd == "ts") {
+      std::cout << mix.to_str(false, false, false, true) << std::endl;
+    } else if (cmd == "pc") {
+      std::cout << mix.to_str(false, false, false, true) << std::endl;
     } else if (cmd == "") {
+      std::cout << std::endl;
       return;
     } else {
       std::cout << "Unknown command!" << std::endl;
