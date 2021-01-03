@@ -20,7 +20,7 @@ constexpr int DISK_SEEK_FACTOR = 10;
 
 /*
  * Memory: 4x10^3 words
- * Tape: 4x10^6 words
+ * Tape: 1x10^6 words
  * Disk: 1x10^5 words
  * Paper tape: 1x10^5 words
  */
@@ -30,7 +30,7 @@ DevInfo DEV_MAGNETIC_TAPE = {
   Format::BINARY,
   StorageType::FIXED_SIZE,
   100,
-  40000,
+  1000,
   true,
   true,
   500,
