@@ -153,7 +153,7 @@ std::map<std::string, std::pair<int, int>> OP_TABLE = {
   {"CMPX", {077, 5}}
 };
 
-std::map<char,int> CHAR_TABLE {
+std::map<char,Byte> CHAR_TABLE {
   {' ', 0},
   {'A', 1},
   {'B', 2},
@@ -214,7 +214,8 @@ std::vector<int> literals;
 
 Word build_word(int a, int i, int f, int c) {
   Word out_a = a;
-  return {a.sgn(), a.b(4), a.b(5), i, f, c};
+  return {out_a.sgn(), {out_a.b(4), out_a.b(5),
+    (Byte) i, (Byte) f, (Byte) c}};
 }
 
 // Add symbol to global/local symbol tables
@@ -239,13 +240,14 @@ int lookup_symbol(std::string symbol, int &val) {
 // (Note: this operation cannot fail)
 int add_future(std::string symbol) {
   // TODO handle local symbols
-  if (fglobals.find(future_a) != fglobals.end()) {
+  int ret;
+  if (fglobals.find(symbol) != fglobals.end()) {
     // daisy chain
-    ret = fglobals[future_a];
+    ret = fglobals[symbol];
   } else {
     ret = -1;
   }
-  fglobals[future_a] = star;
+  fglobals[symbol] = star;
   return ret;
 }
 
@@ -257,6 +259,7 @@ int add_future(std::string symbol) {
 int parse_exp(std::string s, int &e) {
   // TODO
   return 0;
+}
 
 // Parse "W-value" (see Knuth)
 // Return 0 on success, -1 on error
@@ -338,7 +341,7 @@ int assemble_next(std::string s) {
   // First, define the location if it's not empty
   // (and it's not a literal EQU)
   if (loc != "" && op != "EQU") {
-    if (define_global(loc, star) < 0)
+    if (define_symbol(loc, star) < 0)
       return -1;
   }
 
@@ -355,7 +358,7 @@ int assemble_next(std::string s) {
 
     // Handle special operator
     if (op == "EQU") {
-      if (define_global(loc, w) < 0)
+      if (define_symbol(loc, w) < 0)
         return -1;
     } else if (op == "ORIG") {
       star = w;
@@ -363,7 +366,7 @@ int assemble_next(std::string s) {
       words[star++] = w;
     } else if (op == "END") {
       ended = true;
-      end_futures();
+      // end_futures();
     }
     return 0;
   } else if (op == "ALF") {
@@ -375,16 +378,17 @@ int assemble_next(std::string s) {
       D2("Unprintable characters passed to ALF:", addr);
       return -1;
     }
-    words[star++] = {Sign::POS,
+    Word w {Sign::POS, {
       CHAR_TABLE[addr[0]],
       CHAR_TABLE[addr[1]],
       CHAR_TABLE[addr[2]],
       CHAR_TABLE[addr[3]],
-      CHAR_TABLE[addr[4]]},
+      CHAR_TABLE[addr[4]]}};
+    words[star++] = w;
   } else {
     // look up opcode
     if (OP_TABLE.find(op) == OP_TABLE.end()) {
-      D("Unknown opcode: ", op);
+      D2("Unknown opcode: ", op);
       return -1;
     }
     auto op_p = OP_TABLE[op];
@@ -393,7 +397,7 @@ int assemble_next(std::string s) {
     int literal_a;
     int i;
     int f;
-    if (parse_aif(addr, a, future_a, i, f) < 0) {
+    if (parse_aif(addr, a, future_a, literal_a, i, f) < 0) {
       D("Error parsing A,I,F values");
       return -1;
     }
@@ -411,7 +415,7 @@ int assemble_next(std::string s) {
     // Use default value of f if not specified
     if (f == -1)
       f = op_p.second;
-    c = op_p.first;
+    int c = op_p.first;
     D6("Adding new word to assembled map: Star, A, I, F, C =",
         star, a, i, f, c);
     words[star++] = build_word(a, i, f, c);
@@ -436,11 +440,11 @@ int assemble_all(std::istream &in) {
  * Dump all assembled rows into an output file.
  */
 void dump(std::string out_file) {
-  std::ofstream fs {filename};
+  std::ofstream fs {out_file};
   for (auto p : words) {
     fs.width(4);
     fs.fill('0');
-    ss << p->first << ": " << p->second << std::endl;
+    fs << p.first << ": " << p.second << std::endl;
   }
 }
 
