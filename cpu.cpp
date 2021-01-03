@@ -94,6 +94,7 @@ int MixCPU::execute(Word w) {
       (c == 5 && f > 2) ||
       // Shift ops require F in [0,5]
       (c == 6 && f > 6) ||
+      // (IO ops validated by IO coprocessor)
       // Global jump ops require F in [0,9]
       (c == 39 && f > 9) ||
       // Register-based jump ops require F in [0,5]
@@ -256,8 +257,15 @@ int MixCPU::execute(Word w) {
   } else if (c == 33) {
     // STZ
     mem = mem.with_field(0, l, r);
-  } else if (c >= 34 && c < 39) {
-    D("Calling IO coprocessor");
+  } else if (c == 34 || c == 38) { // I/O based jumps
+    bool io_ready = (io->free_ts(f) < 0);
+    if ((c == 34 && !io_ready) || // JBUS
+        (c == 38 && io_ready)) { // JRED
+      core->j = next_pc;
+      next_pc = m;
+    }
+  } else if (c >= 35 && c < 38) { // I/O operations
+    D("Calling IO coprocessor for blocking I/O");
     io->execute(w);
   } else if (c == 39) {
     // Global jumps

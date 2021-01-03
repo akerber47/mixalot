@@ -29,13 +29,13 @@ public:
    */
   int tick();
   /*
-   * Lookup the next clock tick on which the CPU will execute
-   * an instruction.
+   * Lookup the next clock tick on which there will be
+   * a prepared I/O operation or completion.
    */
   int next_ts();
   /*
    * Query first device free ts.
-   * Return 0 if device is currently free.
+   * Return -1 if device is currently free.
    */
   int free_ts(int f);
 
@@ -51,6 +51,9 @@ private:
   std::vector<Word> cur_inst;
   // only used for block devices
   std::vector<int> pos;
+  // do the actual in/out/ioc operation
+  // runs at do_io_ts after the operation
+  // has been staged
   int do_io(Word w);
 };
 
@@ -58,9 +61,20 @@ private:
 
 enum class Format { BINARY, CHAR, CARD };
 enum class StorageType { FIXED_SIZE, STREAM };
+enum class DevType {
+  MAGNETIC_TAPE,
+  DISK,
+  CARD_READER,
+  CARD_PUNCH,
+  LINE_PRINTER,
+  TERMINAL,
+  PAPER_TAPE
+};
+
 
 // High level info per device
 struct DevInfo {
+  DevType type;
   Format fmt;
   StorageType storage;
   int block_size;

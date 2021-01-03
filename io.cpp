@@ -1,5 +1,6 @@
 #include <string>
 #include <vector>
+#include <map>
 #include "dbg.h"
 #include "sys.h"
 #include "core.h"
@@ -10,6 +11,7 @@
 
 constexpr int NUM_DEVICES = 21;
 
+
 /*
  * Memory: 4x10^3 words
  * Tape: 4x10^6 words
@@ -18,6 +20,7 @@ constexpr int NUM_DEVICES = 21;
  */
 
 DevInfo DEV_MAGNETIC_TAPE = {
+  DevType::MAGNETIC_TAPE,
   Format::BINARY,
   StorageType::FIXED_SIZE,
   100,
@@ -29,6 +32,7 @@ DevInfo DEV_MAGNETIC_TAPE = {
 };
 
 DevInfo DEV_DISK = {
+  DevType::DISK,
   Format::BINARY,
   StorageType::FIXED_SIZE,
   100,
@@ -40,6 +44,7 @@ DevInfo DEV_DISK = {
 };
 
 DevInfo DEV_CARD_READER = {
+  DevType::CARD_READER,
   Format::CARD,
   StorageType::STREAM,
   16,
@@ -51,6 +56,7 @@ DevInfo DEV_CARD_READER = {
 };
 
 DevInfo DEV_CARD_PUNCH = {
+  DevType::CARD_PUNCH,
   Format::CARD,
   StorageType::STREAM,
   16,
@@ -62,6 +68,7 @@ DevInfo DEV_CARD_PUNCH = {
 };
 
 DevInfo DEV_LINE_PRINTER = {
+  DevType::LINE_PRINTER,
   Format::CHAR,
   StorageType::STREAM,
   24,
@@ -73,6 +80,7 @@ DevInfo DEV_LINE_PRINTER = {
 };
 
 DevInfo DEV_TERMINAL = {
+  DevType::TERMINAL,
   Format::CHAR,
   StorageType::STREAM,
   14,
@@ -84,6 +92,7 @@ DevInfo DEV_TERMINAL = {
 };
 
 DevInfo DEV_PAPER_TAPE = {
+  DevType::PAPER_TAPE,
   Format::CHAR,
   StorageType::FIXED_SIZE,
   14,
@@ -195,11 +204,26 @@ int MixIO::execute(Word w) {
     D3("Invalid m, (m,w) = ", m, w);
     return IO_ERR;
   }
+
+
   if (c == 35) {
     // IOC for tape devices
-    if ((f < 8 && (((int)m) + pos[f] < 0 ||((int)m) + pos[f] >= info[f].num_blocks)) ||
-        // IOC for disk, printer, and paper tape devices
-        (f >= 8 && m != 0)) {
+    if (info[f].type == DevType::MAGNETIC_TAPE) {
+      if (((int)m) + pos[f] < 0 ||
+         ((int)m) + pos[f] >= info[f].num_blocks) {
+        D3("Invalid m for IOC:", m, w);
+        return IO_ERR;
+      }
+    // IOC for disk, printer, and paper tape devices
+    } else if (info[f].type == DevType::DISK ||
+        info[f].type == DevType::LINE_PRINTER ||
+        info[f].type == DevType::PAPER_TAPE) {
+      if (m != 0) {
+        D3("Invalid m for IOC:", m, w);
+        return IO_ERR;
+      }
+    // IOC not supported for other devices
+    } else {
       D3("Invalid m for IOC:", m, w);
       return IO_ERR;
     }
@@ -213,11 +237,15 @@ int MixIO::execute(Word w) {
   }
 
   if (finish_ts[f] != -1) {
+    D("Executing blocked I/O instruction! Should NEVER happen!");
     return IO_BLK;
   }
 
+  D4("Staging io op #C M F = ", c, m, f);
   do_io_ts[f] = clock->ts() + info[f].time_to_do_io;
   finish_ts[f] = clock->ts() + info[f].time_to_finish;
+  D2("Io op will run at", do_io_ts[f]);
+  D2("Io device will be unblocked at", finish_ts[f]);
   cur_inst[f] = w;
   return 0;
 }
@@ -268,3 +296,87 @@ std::vector<char> CHR_TABLE = {
   '.', ',', '(', ')', '+', '-', '*', '/', '=', '$',
   '<', '>', '@', ';', ':', '\''
 };
+
+std::map<char,int> CHR_REV_TABLE {
+  {' ', 0},
+  {'A', 1},
+  {'B', 2},
+  {'C', 3},
+  {'D', 4},
+  {'E', 5},
+  {'F', 6},
+  {'G', 7},
+  {'H', 8},
+  {'I', 9},
+  {'^', 10},
+  {'J', 11},
+  {'K', 12},
+  {'L', 13},
+  {'M', 14},
+  {'N', 15},
+  {'O', 16},
+  {'P', 17},
+  {'Q', 18},
+  {'R', 19},
+  {'&', 20},
+  {'#', 21},
+  {'S', 22},
+  {'T', 23},
+  {'U', 24},
+  {'V', 25},
+  {'W', 26},
+  {'X', 27},
+  {'Y', 28},
+  {'Z', 29},
+  {'0', 30},
+  {'1', 31},
+  {'2', 32},
+  {'3', 33},
+  {'4', 34},
+  {'5', 35},
+  {'6', 36},
+  {'7', 37},
+  {'8', 38},
+  {'9', 39},
+  {'.', 40},
+  {',', 41},
+  {'(', 42},
+  {')', 43},
+  {'+', 44},
+  {'-', 45},
+  {'*', 46},
+  {'/', 47},
+  {'=', 48},
+  {'$', 49},
+  {'<', 50},
+  {'>', 51},
+  {'@', 52},
+  {';', 53},
+  {':', 54},
+  {'\'', 55}
+};
+
+int MixIO::do_io(Word w) {
+  // All already validated
+  Word aa = w.field(0, 2);
+  int i = w.b(3);
+  int f = w.b(4);
+  int c = w.b(5);
+  Word m = aa;
+  if (i > 0) {
+    m = m + core->i[i-1];
+  }
+  D4("Running io op #C M F = ", c, m, f);
+  if (c == 35) { // IN
+    // TODO
+  } else if (c == 36) { // OUT
+    // TODO
+  } else if (c == 37) { // IOC
+    if (info[f].type == DevType::MAGNETIC_TAPE) {
+      if (m == 0) {
+        // TODO
+      }
+    }
+  }
+}
+
