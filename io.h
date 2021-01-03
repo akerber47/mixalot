@@ -49,7 +49,7 @@ private:
   std::vector<int> do_io_ts;
   std::vector<int> finish_ts;
   std::vector<Word> cur_inst;
-  // only used for block devices
+  // only used for fixed-size block devices
   std::vector<int> pos;
   // do the actual in/out/ioc operation
   // runs at do_io_ts after the operation
