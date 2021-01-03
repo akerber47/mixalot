@@ -153,17 +153,134 @@ std::map<std::string, std::pair<int, int>> OP_TABLE = {
   {"CMPX", {077, 5}}
 };
 
+std::map<char,int> CHAR_TABLE {
+  {' ', 0},
+  {'A', 1},
+  {'B', 2},
+  {'C', 3},
+  {'D', 4},
+  {'E', 5},
+  {'F', 6},
+  {'G', 7},
+  {'H', 8},
+  {'I', 9},
+  {'J', 11},
+  {'K', 12},
+  {'L', 13},
+  {'M', 14},
+  {'N', 15},
+  {'O', 16},
+  {'P', 17},
+  {'Q', 18},
+  {'R', 19},
+  {'S', 22},
+  {'T', 23},
+  {'U', 24},
+  {'V', 25},
+  {'W', 26},
+  {'X', 27},
+  {'Y', 28},
+  {'Z', 29},
+  {'0', 30},
+  {'1', 31},
+  {'2', 32},
+  {'3', 33},
+  {'4', 34},
+  {'5', 35},
+  {'6', 36},
+  {'7', 37},
+  {'8', 38},
+  {'9', 39},
+};
+
 int star = 0;
 bool ended = false;
 std::map<int, Word> words = {};
+// Literal values (key -> value) for defined globals/locals
 std::map<std::string, int> globals = {};
+std::vector<int> locals = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
+// "Daisy chain instructions" (key -> linked list) that need to
+// be substituted once the future global/local is defined.
+// The list next pointer is sneakily stored in the address field of each
+// assembled instruction to make it easy to traverse and
+// rewrite as needed.
+// -1 = end of list marker
 std::map<std::string, int> fglobals = {};
-std::vector<int> locals = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-std::vector<int> flocals = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+std::vector<int> flocals = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
+
+int next_literal = 0;
+std::vector<int> literals;
+
+
+Word build_word(int a, int i, int f, int c) {
+  Word out_a = a;
+  return {a.sgn(), a.b(4), a.b(5), i, f, c};
+}
+
+// Add symbol to global/local symbol tables
+// return 0 on success, -1 on failure (duplicate symbol error)
+// NOTE that this also corrects any daisy chained future symbols
+int define_symbol(std::string symbol, int val) {
+  // TODO
+  return 0;
+}
+
+// Find symbol in global/local symbol tables
+// Return value in &val
+// Return 0 on success, -1 if symbol not found
+int lookup_symbol(std::string symbol, int &val) {
+  // TODO
+  return 0;
+}
+
+// Add a future symbol daisy chain entry
+// Return the value that should be stored in addr for this row
+// that can be used for daisy chaining.
+// (Note: this operation cannot fail)
+int add_future(std::string symbol) {
+  // TODO handle local symbols
+  if (fglobals.find(future_a) != fglobals.end()) {
+    // daisy chain
+    ret = fglobals[future_a];
+  } else {
+    ret = -1;
+  }
+  fglobals[future_a] = star;
+  return ret;
+}
+
+
+// Parse "expression" (see Knuth)
+// Return 0 on success, -1 on error
+// output is stored in e
+// Note that expressions must have fully determined numerical values!
+int parse_exp(std::string s, int &e) {
+  // TODO
+  return 0;
+
+// Parse "W-value" (see Knuth)
+// Return 0 on success, -1 on error
+int parse_w(std::string s, int &w) {
+  // TODO
+  return 0;
+}
+
+// Parse "A-part", "I-part", and "F-part" (see Knuth)
+// A-part is returned in:
+//   a if it's an expression
+//   future_a if it's a future value
+//   literal_a if it's a literal value
+// Any unused cases are set to -1/empty string
+// Return 0 on success, -1 on error
+int parse_aif(std::string s, int &a, std::string &future_a,
+    int &literal_a, int &i, int &f) {
+  // TODO
+  return 0;
+}
+
 
 // Assemble next row of input
 int assemble_next(std::string s) {
-  std::getline(in, s);
   for (char c : s) {
     if (!((c >= 'A' && c <= 'Z') ||
           (c >= '0' && c <= '9') ||
@@ -178,18 +295,18 @@ int assemble_next(std::string s) {
   // Omit blank lines and comments
   if (s.size() == 0 || s[0] == '*')
     return 0;
-  int i = 0;
+  unsigned i = 0;
   while (i < s.size() && s[i] != ' ') i++;
   if (i == s.size()) {
-    D2("Instruction must contain an opcode, given: " s);
+    D2("Instruction must contain an opcode, given: ", s);
     return -1;
   }
   std::string loc {s, 0, i};
   while (i < s.size() && s[i] == ' ') i++;
-  int op_start = i;
+  unsigned op_start = i;
   while (i < s.size() && s[i] != ' ') i++;
   if (i == s.size()) {
-    D2("Instruction must contain an opcode, given: " s);
+    D2("Instruction must contain an opcode, given: ", s);
     return -1;
   }
   std::string op {s, op_start, i};
@@ -209,7 +326,7 @@ int assemble_next(std::string s) {
     if (i == s.size()) {
       addr = "";
     } else {
-      int addr_start = i;
+      unsigned addr_start = i;
       while (i < s.size() && s[i] != ' ') i++;
       addr = {s, addr_start, i};
     }
@@ -217,6 +334,14 @@ int assemble_next(std::string s) {
 
   // At this point, we've tokenized the line
   // into loc (maybe empty), op, and addr (maybe empty).
+
+  // First, define the location if it's not empty
+  // (and it's not a literal EQU)
+  if (loc != "" && op != "EQU") {
+    if (define_global(loc, star) < 0)
+      return -1;
+  }
+
   // Handle different cases for different operators.
 
   // Special operators
@@ -227,25 +352,73 @@ int assemble_next(std::string s) {
       D("Error parsing W value");
       return -1;
     }
-    // TODO handle special opcode with w
+
+    // Handle special operator
+    if (op == "EQU") {
+      if (define_global(loc, w) < 0)
+        return -1;
+    } else if (op == "ORIG") {
+      star = w;
+    } else if (op == "CON") {
+      words[star++] = w;
+    } else if (op == "END") {
+      ended = true;
+      end_futures();
+    }
+    return 0;
   } else if (op == "ALF") {
-    // TODO handle ALF
+    if (CHAR_TABLE.find(addr[0]) == CHAR_TABLE.end() ||
+        CHAR_TABLE.find(addr[1]) == CHAR_TABLE.end() ||
+        CHAR_TABLE.find(addr[2]) == CHAR_TABLE.end() ||
+        CHAR_TABLE.find(addr[3]) == CHAR_TABLE.end() ||
+        CHAR_TABLE.find(addr[4]) == CHAR_TABLE.end()) {
+      D2("Unprintable characters passed to ALF:", addr);
+      return -1;
+    }
+    words[star++] = {Sign::POS, CHAR_TABLE[addr[0]], CHAR_TABLE[addr[1]],
+      CHAR_TABLE[addr[2]], CHAR_TABLE[addr[3]], CHAR_TABLE[addr[4]]},
   } else {
+    // look up opcode
+    if (OP_TABLE.find(op) == OP_TABLE.end()) {
+      D("Unknown opcode: ", op);
+      return -1;
+    }
+    auto op_p = OP_TABLE[op];
     int a;
     std::string future_a;
+    int literal_a;
     int i;
     int f;
-    if (parse_a(addr, a, future_a, i, f) < 0) {
+    if (parse_aif(addr, a, future_a, i, f) < 0) {
       D("Error parsing A,I,F values");
       return -1;
     }
-    // TODO handle general opcode
+    // Literal case: create a new "fake symbol"
+    // and handle same as future symbol
+    if (literal_a != -1) {
+      future_a = "*LIT" + std::to_string(next_literal++);
+      literals.push_back(literal_a);
+    }
+    if (future_a != "") {
+    }
+    // After this point, a stores the value we want to assemble
+    // (which is the special list pointer in future cases)
+
+    // Use default value of f if not specified
+    if (f == -1)
+      f = op_p.second;
+    c = op_p.first;
+    D6("Adding new word to assembled map: Star, A, I, F, C =",
+        star, a, i, f, c);
+    words[star++] = build_word(a, i, f, c);
+    return 0;
   }
 }
 
-int assemble_all(std::istream in) {
+int assemble_all(std::istream &in) {
   for (std::string s; getline(in, s); ) {
-    if ((int ret = assemble_next(s)) < 0)
+    int ret;
+    if ((ret = assemble_next(s)) < 0)
       return ret;
   }
   if (!ended) {
@@ -258,11 +431,19 @@ int assemble_all(std::istream in) {
 /*
  * Dump all assembled rows into an output file.
  */
-void dump(std::string out_file);
+void dump(std::string out_file) {
+  std::ofstream fs {filename};
+  for (auto p : words) {
+    fs.width(4);
+    fs.fill('0');
+    ss << p->first << ": " << p->second << std::endl;
+  }
+}
 
 int main(int argc, char **argv) {
   if (argc < 3) {
-    std::cout << "Usage: mixal <input.mixal> <output.mix>" << std::endl;
+    std::cout << "Usage: mixal <input.mixal> <output.mix>"
+      << std::endl;
     return 2;
   }
   DBG_INIT();
