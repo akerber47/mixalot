@@ -683,7 +683,7 @@ void assemble_next(std::string s) {
 
     // EQU and ORIG handled at end
     if (op == "CON") {
-      words[star++] = w;
+      words[star] = w;
     } else if (op == "END") {
       clean_futures();
       ended = true;
@@ -703,7 +703,7 @@ void assemble_next(std::string s) {
       CHAR_TABLE[addr[2]],
       CHAR_TABLE[addr[3]],
       CHAR_TABLE[addr[4]]}};
-    words[star++] = alfw;
+    words[star] = alfw;
   } else {
     // look up opcode
     if (OP_TABLE.find(op) == OP_TABLE.end()) {
@@ -724,6 +724,7 @@ void assemble_next(std::string s) {
       literals.push_back(literal_a);
     }
     if (future_a != "") {
+      add_future(future_a, a);
     }
     // After this point, a stores the value we want to assemble
     // (which is the special list pointer in future cases)
@@ -734,7 +735,7 @@ void assemble_next(std::string s) {
     int c = op_p.first;
     D6("Adding new word to assembled map: Star, A, I, F, C =",
         star, a, i, f, c);
-    words[star++] = build_word(a, i, f, c);
+    words[star] = build_word(a, i, f, c);
   }
 
   // Finally, define the location
@@ -767,8 +768,11 @@ void assemble_next(std::string s) {
   }
 
   // Finally, ORIG takes effect after defining the location
+  // otherwise, star bumps forward to next instruction
   if (op == "ORIG") {
     star = w;
+  } else if (op != "EQU" && op != "END") {
+    star++;
   }
 }
 
