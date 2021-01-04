@@ -488,6 +488,7 @@ int parse_exp(std::string s) {
       e = (8*e) + rhs;
     }
   }
+  D2("Found expression", e);
   return e;
 }
 
@@ -523,6 +524,7 @@ int parse_w(std::string s) {
     pos = next_pos + 1;
     next_pos = s.find(',', pos);
   } while (next_pos != std::string::npos);
+  D2("Found w-value: ", (int) w);
   return w;
 }
 
@@ -559,9 +561,12 @@ void parse_aif(std::string s, int &a, std::string &future_a,
   }
   unsigned long a_end;
   if ((a_end = s.find(',')) != std::string::npos) {
-    ip = {s, i_end+1, s.size()-i_end-2};
-    ap = {s, 0, i_end};
+    ip = {s, a_end+1, s.size()-a_end-1};
+    ap = {s, 0, a_end};
   }
+  D2("ap = ", ap);
+  D2("ip = ", ip);
+  D2("fp = ", fp);
 
   // Vacuous case
   if (ap == "") {
@@ -605,6 +610,7 @@ void parse_aif(std::string s, int &a, std::string &future_a,
   if (fp != "") {
     f = parse_exp(fp);
   }
+  D6("Found AIF", a, future_a, literal_a, i, f);
 }
 
 
