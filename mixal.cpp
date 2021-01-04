@@ -395,16 +395,106 @@ void clean_futures() {
 
 // Parse "expression" (see Knuth) and return its value
 // Throw on error
-// output is stored in e
 // Note that expressions must have fully determined numerical values!
 int parse_exp(std::string s) {
-  // TODO
-  return 0;
+  D2("Parsing expression from: ", s);
+  if (s == "") {
+    D("Expression cannot be empty!");
+    throw Asm_error(-1);
+  }
+  unsigned long i = 0;
+  int e = 0;
+  std::string binop = "+";
+  std::string unop = "+";
+  while (i < s.size()) {
+    // Ingest next binop
+    if (i == 0) {
+      // Hack: on first iteration, fake "+" binop
+      // (so operation will be 0 + atom)
+      // and move to unop/atom
+      binop = "+";
+    } else {
+      // search: +, -, *, /, //, :
+      if (s[i] == '/') {
+        i++;
+        if (i < s.size() && s[i] == '/') {
+          binop = "//";
+          i++;
+        } else {
+          binop = "/";
+        }
+      } else {
+        binop = s[i++];
+      }
+    }
+
+    // Check for dangling binary operator (missing RHS)
+    if (i == s.size()) {
+      D2("Expected atom following operator ", binop);
+      D2(" in expression ", s);
+      throw Asm_error(-1);
+    }
+
+    //Ingest next unop, if any
+    if (s[i] == '+' || s[i] == '-') {
+      unop = s[i++];
+    } else {
+      unop = "+";
+    }
+
+    // Ingest next atom
+    int atom = 0;
+    unsigned long atom_start = i;
+    if (s[i] == '*') { // * atom
+      atom = star;
+      i++;
+    } else {
+      bool has_az = false;
+      while (i < s.size() && (is09(s[i]) || isAZ(s[i]))) {
+        if (isAZ(s[i]))
+          has_az = true;
+        i++;
+      }
+      std::string atom_sym = {s, atom_start, i};
+      if (atom_sym == "") {
+        D2("Expected atom following operator ", binop);
+        D2(" in expression ", s);
+        throw Asm_error(-1);
+      }
+      if (has_az) { // symbol atom
+        if (lookup_symbol(atom_sym, atom) < 0) {
+          D3("Undefined symbol in expression!", atom_sym, s);
+          throw Asm_error(-1);
+        }
+      } else {
+        atom = std::stoi(atom_sym);
+      }
+    }
+
+    // Finally, do the arithmetic
+    int rhs = (unop == "-") ? -atom : atom;
+    if (binop == "+") {
+      e += rhs;
+    } else if (binop == "-") {
+      e -= rhs;
+    } else if (binop == "*") {
+      e *= rhs;
+    } else if (binop == "/") {
+      e /= rhs;
+    } else if (binop == "//") {
+      // TODO this isn't right
+      e %= rhs;
+    } else if (binop == ":") {
+      e = (8*e) + rhs;
+    }
+  }
+  return e;
 }
 
 // Parse "W-value" (see Knuth) and return its value
 // throw on error
 int parse_w(std::string s) {
+  D2("Parsing W-value from: ", s);
   unsigned long pos = 0;
   unsigned long next_pos;
   Word w = 0;
@@ -446,6 +536,7 @@ int parse_w(std::string s) {
 // throw on error
 void parse_aif(std::string s, int &a, std::string &future_a,
     int &literal_a, int &i, int &f) {
+  D2("Parsing A,I, and F-values (opcode RHS) from: ", s);
   // default values
   a = -1;
   future_a = "";
