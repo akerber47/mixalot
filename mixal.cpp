@@ -212,50 +212,180 @@ int next_literal = 0;
 std::vector<int> literals;
 
 
+inline bool is09(char c) {
+  return (c >= '0' && c <= '9');
+}
+
+inline bool isAZ(char c) {
+  return (c >= 'A' && c <= 'Z');
+}
+
+inline int ctoi(char c) {
+  return (c - '0');
+}
+
+// Check if a symbol is local, and if so put the local index in &i
+// if it's a future local symbol (#F), set &is_future to true.
+// If loc_context is true, look for (#H) symbols not #F/#B
+//   it's an error to use #H in addr context or #F/#B in loc context
+// If it's not a local symbol, put -1 in the i argument.
+// Return 0 on success, -1 on failure (invalid local symbol)
+int get_local(std::string sym, bool loc_context, int &i, bool &is_future) {
+  if (sym.size() == 2 && is09(sym[0])) {
+    if (sym[1] == 'H') {
+      if (loc_context) {
+        i = ctoi(sym[0]);
+        is_future = false;
+        return 0;
+      } else {
+        D2("Invalid appearance of local H symbol in addr context! ", sym);
+        return -1;
+      }
+    } else if (sym[1] == 'F' || sym[1] == 'B') {
+      if (!loc_context) {
+        i = ctoi(sym[0]);
+        is_future = (sym[1] == 'F');
+        return 0;
+      } else {
+        D2("Invalid appearance of local BF symbol in loc context! ", sym);
+        return -1;
+      }
+    }
+  }
+  i = -1;
+  is_future = false;
+  return 0;
+}
+
 Word build_word(int a, int i, int f, int c) {
   Word out_a = a;
-  return {out_a.sgn(), {out_a.b(4), out_a.b(5),
+  Word w {out_a.sgn(), {out_a.b(4), out_a.b(5),
     (Byte) i, (Byte) f, (Byte) c}};
+  D2("Assembled word: ", w);
+  return w;
 }
 
 // Add symbol to global/local symbol tables
-// return 0 on success, -1 on failure (duplicate symbol error)
+// return 0 on success, -1 on failure
 // NOTE that this also corrects any daisy chained future symbols
-int define_symbol(std::string symbol, int val) {
-  // TODO
+int define_symbol(std::string sym, int val) {
+
+  D4("Adding symbol definition: ", sym, " = ", val);
+  // Will be set to the most recent appearance if there
+  // are earlier appearances of this symbol (before definition)
+  int future_chain = -1;
+
+  int ix;
+  bool is_future;
+  if (get_local(sym, true, ix, is_future) < 0)
+    return -1;
+
+  if (ix >= 0) { // Local
+    locals[ctoi(sym[0])] = val;
+
+    future_chain = flocals[ctoi(sym[0])];
+    flocals[ctoi(sym[0])] = -1;
+  } else { // Global
+    if (globals.find(sym) != globals.end()) {
+      D4("Error: global symbol already defined! ",
+          sym, " = ", globals[sym]);
+      return -1;
+    }
+    globals[sym] = val;
+    if (fglobals.find(sym) != fglobals.end()) {
+       future_chain = fglobals[sym];
+    }
+    fglobals.erase(sym);
+  }
+
+  // chase future definition chain
+  while (future_chain != -1) {
+    D2("Found previous appearance of this as a future symbol at ",
+        future_chain);
+    int tmp = words[future_chain].field(0,2);
+    words[future_chain] = build_word(
+        val,
+        words[future_chain].b(3),
+        words[future_chain].b(4),
+        words[future_chain].b(5));
+    future_chain = tmp;
+  }
   return 0;
 }
 
 // Find symbol in global/local symbol tables
 // Return value in &val
-// Return 0 on success, -1 if symbol not found
-int lookup_symbol(std::string symbol, int &val) {
-  // TODO
+// Return 0 on success, -1 on failure
+int lookup_symbol(std::string sym, int &val) {
+  D2("Looking up symbol: ", sym);
+  int ix;
+  bool is_future;
+  if (get_local(sym, false, ix, is_future) < 0)
+    return -1;
+
+  // Cannot lookup future locals yet
+  if (is_future)
+    return -1;
+
+  if (ix >= 0) { // Local
+    return locals[ctoi(sym[0])];
+  } else { // Global
+    if (globals.find(sym) == globals.end())
+      return -1;
+    else
+      return globals[sym];
   return 0;
 }
 
 // Add a future symbol daisy chain entry
 // Return the value that should be stored in addr for this row
-// that can be used for daisy chaining.
-// (Note: this operation cannot fail)
-int add_future(std::string symbol) {
-  // TODO handle local symbols
-  int ret;
-  if (fglobals.find(symbol) != fglobals.end()) {
-    // daisy chain
-    ret = fglobals[symbol];
-  } else {
-    ret = -1;
+// that can be used for daisy chaining in &a
+// Return 0 on success, -1 on failure
+int add_future(std::string sym, int &a) {
+  D4("Adding future symbol reference: ", sym, " at ", star);
+  int ix;
+  bool is_future;
+  if (get_local(sym, false, ix, is_future) < 0)
+    return -1;
+
+  if (ix >= 0) { // Local
+    if (!is_future) {
+      D2("Local past symbol has no existing definition!", sym);
+      return -1;
+    }
+    a = flocals[ctoi(sym[0])];
+    flocals[ctoi(sym[0])] = star;
+  } else { // Global
+    if (fglobals.find(sym) != fglobals.end()) {
+      // daisy chain
+      a = fglobals[sym];
+    } else {
+      a = -1;
+    }
+    fglobals[sym] = star;
   }
-  fglobals[symbol] = star;
-  return ret;
+  return 0;
 }
 
 // Clean futures by adding additional rows
 // (starting at *) that define the appropriate symbols
 // called at END
-void clean_futures() {
-  // TODO
+int clean_futures() {
+  D("Cleaning up remaining future symbols...");
+  for (int i : flocals) {
+    if (i != -1) {
+      D3("Error! Undefined future local reference at", i, flocals[i]);
+      return -1;
+    }
+  }
+  for (auto p : fglobals) {
+    // Fake instruction:
+    // <SYM> CON 0
+    if (define_symbol(p.first, star) < 0)
+      return -1;
+    words[star++] = 0;
+  }
+  return 0;
 }
 
 
@@ -292,8 +422,7 @@ int parse_aif(std::string s, int &a, std::string &future_a,
 // Assemble next row of input
 int assemble_next(std::string s) {
   for (char c : s) {
-    if (!((c >= 'A' && c <= 'Z') ||
-          (c >= '0' && c <= '9') ||
+    if (!(is09(c) || isAZ(c) ||
           c == ' ' || c == '*' || c == '/' ||
           c == '+' || c == '-' || c == ':' ||
           c == '=' || 
@@ -345,34 +474,23 @@ int assemble_next(std::string s) {
   // At this point, we've tokenized the line
   // into loc (maybe empty), op, and addr (maybe empty).
 
-  // First, define the location if it's not empty
-  // (and it's not a literal EQU)
-  if (loc != "" && op != "EQU") {
-    if (define_symbol(loc, star) < 0)
-      return -1;
-  }
-
   // Handle different cases for different operators.
 
   // Special operators
+  int w = 0;
   if (op == "EQU" || op == "ORIG" ||
       op == "CON" || op == "END") {
-    int w;
     if (parse_w(addr, w) < 0) {
       D("Error parsing W value");
       return -1;
     }
 
-    // Handle special operator
-    if (op == "EQU") {
-      if (define_symbol(loc, w) < 0)
-        return -1;
-    } else if (op == "ORIG") {
-      star = w;
-    } else if (op == "CON") {
+    // EQU and ORIG handled at end
+    if (op == "CON") {
       words[star++] = w;
     } else if (op == "END") {
-      clean_futures();
+      if (clean_futures() < 0)
+        return -1;
       ended = true;
     }
     return 0;
@@ -385,13 +503,13 @@ int assemble_next(std::string s) {
       D2("Unprintable characters passed to ALF:", addr);
       return -1;
     }
-    Word w {Sign::POS, {
+    Word alfw {Sign::POS, {
       CHAR_TABLE[addr[0]],
       CHAR_TABLE[addr[1]],
       CHAR_TABLE[addr[2]],
       CHAR_TABLE[addr[3]],
       CHAR_TABLE[addr[4]]}};
-    words[star++] = w;
+    words[star++] = alfw;
   } else {
     // look up opcode
     if (OP_TABLE.find(op) == OP_TABLE.end()) {
@@ -426,8 +544,44 @@ int assemble_next(std::string s) {
     D6("Adding new word to assembled map: Star, A, I, F, C =",
         star, a, i, f, c);
     words[star++] = build_word(a, i, f, c);
-    return 0;
   }
+
+  // Finally, define the location
+  // validate the LOC
+  bool has_az = false;
+  if (loc != "") {
+    for (char c : loc) {
+      if (!(is09(c) || isAZ(c))) {
+        D2("Invalid character in symbol: ", c);
+        return -1;
+      }
+      has_az ||= isAZ(c);
+    }
+    if (!has_az) {
+      D2("Invalid symbol! ", loc);
+      D("Symbol must contain at least one letter.");
+      return -1;
+    }
+    if (op != "EQU") {
+      if (define_symbol(loc, star) < 0)
+        return -1;
+    }
+  }
+  // Handle special operator
+  if (op == "EQU") {
+    if (loc == "") {
+      D("Invalid empty loc field for EQU operator");
+      return -1;
+    }
+    if (define_symbol(loc, w) < 0)
+      return -1;
+  }
+
+  // Finally, ORIG takes effect after defining the location
+  if (op == "ORIG") {
+    star = w;
+  }
+  return 0;
 }
 
 int assemble_all(std::istream &in) {
