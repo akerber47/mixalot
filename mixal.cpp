@@ -496,9 +496,9 @@ int parse_exp(std::string s) {
 int parse_w(std::string s) {
   D2("Parsing W-value from: ", s);
   unsigned long pos = 0;
-  unsigned long next_pos;
+  unsigned long next_pos = s.find(',', pos);
   Word w = 0;
-  while ((next_pos = s.find(',', pos)) != std::string::npos) {
+  do {
     std::string s_term = {s, pos, next_pos-pos};
     auto lpos = s_term.find('(');
     auto rpos = s_term.find(')');
@@ -521,7 +521,8 @@ int parse_w(std::string s) {
       w = w.with_field(e, l, r);
     }
     pos = next_pos + 1;
-  }
+    next_pos = s.find(',', pos);
+  } while (next_pos != std::string::npos);
   return w;
 }
 
