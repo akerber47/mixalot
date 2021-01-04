@@ -258,7 +258,6 @@ void get_local(std::string sym, bool loc_context, int &i, bool &is_future) {
   }
   i = -1;
   is_future = false;
-  return 0;
 }
 
 Word build_word(int a, int i, int f, int c) {
@@ -380,12 +379,10 @@ void add_future(std::string sym, int &a) {
 // throw on error
 void clean_futures() {
   D("Cleaning up remaining future symbols...");
-  for (int i : flocals) {
-    if (i != -1) {
-      D3("Error! Undefined future local reference at END at",
-          i, flocals[i]);
-      throw Asm_error(-1);
-    }
+  for (auto p : flocals) {
+    D3("Error! Undefined future local reference at END at",
+        p.first, p.second);
+    throw Asm_error(-1);
   }
   for (auto p : fglobals) {
     // Fake instruction:
@@ -396,20 +393,46 @@ void clean_futures() {
 }
 
 
-// Parse "expression" (see Knuth)
-// Return 0 on success, -1 on error
+// Parse "expression" (see Knuth) and return its value
+// Throw on error
 // output is stored in e
 // Note that expressions must have fully determined numerical values!
-int parse_exp(std::string s, int &e) {
+int parse_exp(std::string s) {
   // TODO
   return 0;
 }
 
-// Parse "W-value" (see Knuth)
-// Return 0 on success, -1 on error
-int parse_w(std::string s, int &w) {
-  // TODO
-  return 0;
+// Parse "W-value" (see Knuth) and return its value
+// throw on error
+int parse_w(std::string s) {
+  unsigned long pos = 0;
+  unsigned long next_pos;
+  Word w = 0;
+  while ((next_pos = s.find(',', pos)) != std::string::npos) {
+    std::string s_term = {s, pos, next_pos};
+    auto lpos = s_term.find('(');
+    auto rpos = s_term.find(')');
+    if (lpos == std::string::npos &&
+        rpos == std::string::npos) {
+      int e = parse_exp(s_term);
+      w = e;
+    } else if (lpos != std::string::npos &&
+        rpos != std::string::npos &&
+        rpos == s_term.size()-1 &&
+        lpos < rpos) {
+      int e = parse_exp({s_term, 0, lpos});
+      int f = parse_exp({s_term, lpos+1, rpos});
+      int l = f / 8;
+      int r = f % 8;
+      if (l > r || r > 5) {
+        D2("Bad field! ", f);
+        throw Asm_error(-1);
+      }
+      w = w.with_field(e, l, r);
+    }
+    pos = next_pos + 1;
+  }
+  return w;
 }
 
 // Parse "A-part", "I-part", and "F-part" (see Knuth)
@@ -418,11 +441,78 @@ int parse_w(std::string s, int &w) {
 //   future_a if it's a future value
 //   literal_a if it's a literal value
 // Any unused cases are set to -1/empty string
-// Return 0 on success, -1 on error
-int parse_aif(std::string s, int &a, std::string &future_a,
+// i set to 0 if not specified
+// f set to -1 if not specified
+// throw on error
+void parse_aif(std::string s, int &a, std::string &future_a,
     int &literal_a, int &i, int &f) {
-  // TODO
-  return 0;
+  // default values
+  a = -1;
+  future_a = "";
+  literal_a = -1;
+  i = 0;
+  f = -1;
+
+  // Split into A, I, and F parts
+  std::string ap = s, ip = "", fp = "";
+  unsigned long i_end;
+  if ((i_end = s.find('(')) != std::string::npos) {
+    if (s.find(')' != s.size()-1)) {
+      D2("Bad field in op address: ", s);
+      throw Asm_error(-1);
+    }
+    fp = {s, i_end+1, s.size()-1};
+    ap = {s, 0, i_end};
+    s = {s, 0, i_end};
+  }
+  unsigned long a_end;
+  if ((a_end = s.find(',')) != std::string::npos) {
+    ip = {s, i_end+1, s.size()};
+    ap = {s, 0, i_end};
+  }
+
+  // Vacuous case
+  if (ap == "") {
+    a = 0;
+  }
+  // Literal case
+  if (ap[0] == '=') {
+    if (ap.find('=', 1) != ap.size()-1) {
+      D2("Bad literal in address part!", s);
+      throw Asm_error(-1);
+    }
+    literal_a = parse_exp({ap, 1, ap.size()-1});
+  } else {
+    bool has_az = false;
+    bool has_spec = false;
+    for (char c : ap) {
+      if (isAZ(c))
+        has_az = true;
+      if (!isAZ(c) && !is09(c))
+        has_spec = true;
+    }
+    // entire A part is a single symbol
+    if (has_az && !has_spec) {
+      int val;
+      if (lookup_symbol(ap, val) == 0)
+        // already-defined single symol
+        a = val;
+      else
+        // future case
+        future_a = ap;
+    } else {
+      // Expression case
+      a = parse_exp(ap);
+    }
+  }
+
+  if (ip != "") {
+    i = parse_exp(ip);
+  }
+
+  if (fp != "") {
+    f = parse_exp(fp);
+  }
 }
 
 
@@ -488,7 +578,7 @@ void assemble_next(std::string s) {
   int w = 0;
   if (op == "EQU" || op == "ORIG" ||
       op == "CON" || op == "END") {
-    parse_w(addr, w);
+    w = parse_w(addr);
 
     // EQU and ORIG handled at end
     if (op == "CON") {
