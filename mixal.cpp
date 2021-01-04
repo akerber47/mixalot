@@ -455,7 +455,7 @@ int parse_exp(std::string s) {
           has_az = true;
         i++;
       }
-      std::string atom_sym = {s, atom_start, i};
+      std::string atom_sym = {s, atom_start, i-atom_start};
       if (atom_sym == "") {
         D2("Expected atom following operator ", binop);
         D2(" in expression ", s);
@@ -499,7 +499,7 @@ int parse_w(std::string s) {
   unsigned long next_pos;
   Word w = 0;
   while ((next_pos = s.find(',', pos)) != std::string::npos) {
-    std::string s_term = {s, pos, next_pos};
+    std::string s_term = {s, pos, next_pos-pos};
     auto lpos = s_term.find('(');
     auto rpos = s_term.find(')');
     if (lpos == std::string::npos &&
@@ -511,7 +511,7 @@ int parse_w(std::string s) {
         rpos == s_term.size()-1 &&
         lpos < rpos) {
       int e = parse_exp({s_term, 0, lpos});
-      int f = parse_exp({s_term, lpos+1, rpos});
+      int f = parse_exp({s_term, lpos+1, rpos-lpos-1});
       int l = f / 8;
       int r = f % 8;
       if (l > r || r > 5) {
@@ -552,13 +552,13 @@ void parse_aif(std::string s, int &a, std::string &future_a,
       D2("Bad field in op address: ", s);
       throw Asm_error(-1);
     }
-    fp = {s, i_end+1, s.size()-1};
+    fp = {s, i_end+1, s.size()-i_end-2};
     ap = {s, 0, i_end};
     s = {s, 0, i_end};
   }
   unsigned long a_end;
   if ((a_end = s.find(',')) != std::string::npos) {
-    ip = {s, i_end+1, s.size()};
+    ip = {s, i_end+1, s.size()-i_end-2};
     ap = {s, 0, i_end};
   }
 
@@ -572,7 +572,7 @@ void parse_aif(std::string s, int &a, std::string &future_a,
       D2("Bad literal in address part!", s);
       throw Asm_error(-1);
     }
-    literal_a = parse_exp({ap, 1, ap.size()-1});
+    literal_a = parse_exp({ap, 1, ap.size()-2});
   } else {
     bool has_az = false;
     bool has_spec = false;
@@ -630,6 +630,7 @@ void assemble_next(std::string s) {
     throw Asm_error(-1);
   }
   std::string loc {s, 0, i};
+  D2("Loc is ", loc);
   while (i < s.size() && s[i] == ' ') i++;
   unsigned op_start = i;
   while (i < s.size() && s[i] != ' ') i++;
@@ -637,14 +638,15 @@ void assemble_next(std::string s) {
     D2("Instruction must contain an opcode, given: ", s);
     throw Asm_error(-1);
   }
-  std::string op {s, op_start, i};
+  std::string op {s, op_start, i-op_start};
+  D2("Opcode is ", op);
   std::string addr;
   // Special case -- ALF operator can ingest spaces
   if (op == "ALF") {
     i++;
     if (i < s.size() && s[i] == ' ') i++;
     if (i+5 < s.size()) {
-      addr = {s, i, i+5};
+      addr = {s, i, 5};
     } else {
       D2("ALF instruction: address too short: ", s);
       throw Asm_error(-1);
@@ -656,9 +658,10 @@ void assemble_next(std::string s) {
     } else {
       unsigned addr_start = i;
       while (i < s.size() && s[i] != ' ') i++;
-      addr = {s, addr_start, i};
+      addr = {s, addr_start, i-addr_start};
     }
   }
+  D2("Addr is ", addr);
 
   // At this point, we've tokenized the line
   // into loc (maybe empty), op, and addr (maybe empty).
