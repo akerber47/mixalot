@@ -334,6 +334,7 @@ int lookup_symbol(std::string sym, int &val) {
       return -1;
     else
       return globals[sym];
+  }
   return 0;
 }
 
@@ -555,7 +556,7 @@ int assemble_next(std::string s) {
         D2("Invalid character in symbol: ", c);
         return -1;
       }
-      has_az ||= isAZ(c);
+      has_az = (has_az || isAZ(c));
     }
     if (!has_az) {
       D2("Invalid symbol! ", loc);
